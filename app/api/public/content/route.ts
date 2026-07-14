@@ -180,7 +180,7 @@ export async function GET(
           targetId: {
             $in: publicEntryIds,
           },
-        })
+        } as any)
           .sort({
             sourceId: 1,
             sortOrder: 1,
