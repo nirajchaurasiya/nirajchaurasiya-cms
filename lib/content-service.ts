@@ -1,12 +1,11 @@
 import "server-only";
-import {
-  isValidObjectId,
-} from "mongoose";
+import { isValidObjectId } from "mongoose";
 import { dbConnect } from "@/lib/mongodb";
-import AuditLog from "@/models/AuditLog";
-import ContentEntry from "@/models/ContentEntry";
-import ContentRevision from "@/models/ContentRevision";
-import PublishJob from "@/models/PublishJob";
+import { processPublishJob } from "@/lib/publishing";
+import AuditLogModel from "@/models/AuditLog";
+import ContentEntryModel from "@/models/ContentEntry";
+import ContentRevisionModel from "@/models/ContentRevision";
+import PublishJobModel from "@/models/PublishJob";
 import type {
   ContentType,
   JsonObject,
@@ -17,7 +16,8 @@ export type ContentDraftInput = {
   slug: string;
   title: string;
   summary: string;
-  publicPath?: string | null;
+  publicPath: string | null;
+  featured: boolean;
   draftData: JsonObject;
 };
 
@@ -25,22 +25,22 @@ type Actor = {
   githubLogin: string;
 };
 
-function normalizeSlug(
-  slug: string,
-) {
-  return slug
-    .trim()
-    .toLowerCase();
+function normalizeSlug(slug: string) {
+  return slug.trim().toLowerCase();
 }
 
-function ensureObjectId(
-  id: string,
-) {
+function validateObjectId(id: string) {
   if (!isValidObjectId(id)) {
-    throw new Error(
-      "Invalid content ID.",
-    );
+    throw new Error("Invalid content-entry ID.");
   }
+}
+
+function isDuplicateKeyError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    Reflect.get(error, "code") === 11000
+  );
 }
 
 export async function createDraft(
@@ -49,258 +49,215 @@ export async function createDraft(
 ) {
   await dbConnect();
 
-  const entry =
-    await ContentEntry.create({
+  try {
+    const entry = await ContentEntryModel.create({
       type: input.type,
+      slug: normalizeSlug(input.slug),
+      title: input.title.trim(),
+      summary: input.summary.trim(),
+      publicPath: input.publicPath,
+      featured: input.featured,
 
-      slug:
-        normalizeSlug(
-          input.slug,
-        ),
+      workflowStatus: "DRAFT",
+      publicationStatus: "NEVER_PUBLISHED",
 
-      title:
-        input.title.trim(),
-
-      summary:
-        input.summary.trim(),
-
-      publicPath:
-        input.publicPath
-          ?.trim() || null,
-
-      workflowStatus:
-        "DRAFT",
-
-      publicationStatus:
-        "NEVER_PUBLISHED",
-
-      draftData:
-        input.draftData,
-
+      draftData: input.draftData,
       publishedData: null,
 
       draftVersion: 1,
-
       publishedVersion: null,
     });
 
-  await Promise.all([
-    ContentRevision.create({
-      entryId: entry._id,
+    try {
+      await Promise.all([
+        ContentRevisionModel.create({
+          entryId: entry._id,
+          revisionNumber: 1,
+          kind: "CREATED",
+          snapshot: input.draftData,
+          actorLogin: actor.githubLogin,
+        }),
 
-      revisionNumber: 1,
+        AuditLogModel.create({
+          action: "CREATE",
+          actorLogin: actor.githubLogin,
+          entityType: "ContentEntry",
+          entityId: entry._id,
+          description:
+            `Created ${entry.type} draft: ${entry.title}`,
+        }),
+      ]);
+    } catch (error) {
+      await ContentEntryModel.deleteOne({
+        _id: entry._id,
+      });
 
-      kind: "CREATED",
+      throw error;
+    }
 
-      snapshot:
-        input.draftData,
+    return entry;
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw new Error(
+        "An entry with this content type and slug already exists.",
+      );
+    }
 
-      actorLogin:
-        actor.githubLogin,
-    }),
-
-    AuditLog.create({
-      action: "CREATE",
-
-      actorLogin:
-        actor.githubLogin,
-
-      entityType:
-        "ContentEntry",
-
-      entityId: entry._id,
-
-      description:
-        `Created ${entry.type} draft: ${entry.title}`,
-    }),
-  ]);
-
-  return entry;
+    throw error;
+  }
 }
 
 export async function saveDraft(
   id: string,
+  expectedDraftVersion: number,
   input: ContentDraftInput,
   actor: Actor,
 ) {
-  ensureObjectId(id);
+  validateObjectId(id);
   await dbConnect();
 
-  const current =
-    await ContentEntry.findById(id)
-      .lean();
+  const existing = await ContentEntryModel.findById(id)
+    .select({
+      workflowStatus: 1,
+      draftVersion: 1,
+    })
+    .lean();
 
-  if (!current) {
+  if (!existing) {
     throw new Error(
-      "Content entry was not found.",
+      "The content entry could not be found.",
     );
   }
 
-  if (
-    current.workflowStatus ===
-    "ARCHIVED"
-  ) {
+  if (existing.workflowStatus === "ARCHIVED") {
     throw new Error(
       "Archived content must be restored before editing.",
     );
   }
 
-  const nextVersion =
-    current.draftVersion + 1;
-
-  /*
-   * Including the current draftVersion
-   * in the query prevents one editor
-   * from silently overwriting a newer
-   * version.
-   */
-  const updated =
-    await ContentEntry.findOneAndUpdate(
-      {
-        _id: id,
-        draftVersion:
-          current.draftVersion,
-      },
-
-      {
-        $set: {
-          type: input.type,
-
-          slug:
-            normalizeSlug(
-              input.slug,
-            ),
-
-          title:
-            input.title.trim(),
-
-          summary:
-            input.summary.trim(),
-
-          publicPath:
-            input.publicPath
-              ?.trim() || null,
-
-          draftData:
-            input.draftData,
-
-          workflowStatus:
-            "DRAFT",
-        },
-
-        $inc: {
-          draftVersion: 1,
-        },
-      },
-
-      {
-        new: true,
-        runValidators: true,
-      },
-    );
-
-  if (!updated) {
+  if (existing.draftVersion !== expectedDraftVersion) {
     throw new Error(
-      "This content changed before your save completed. Reload the entry and try again.",
+      "This entry changed after you opened it. Reload the page before saving.",
     );
   }
 
-  await Promise.all([
-    ContentRevision.create({
-      entryId: updated._id,
+  try {
+    const updated =
+      await ContentEntryModel.findOneAndUpdate(
+        {
+          _id: id,
+          draftVersion: expectedDraftVersion,
+        },
 
-      revisionNumber:
-        nextVersion,
+        {
+          $set: {
+            type: input.type,
+            slug: normalizeSlug(input.slug),
+            title: input.title.trim(),
+            summary: input.summary.trim(),
+            publicPath: input.publicPath,
+            featured: input.featured,
+            draftData: input.draftData,
+            workflowStatus: "DRAFT",
+          },
 
-      kind: "DRAFT_SAVE",
+          $inc: {
+            draftVersion: 1,
+          },
+        },
 
-      snapshot:
-        input.draftData,
+        {
+          new: true,
+          runValidators: true,
+        },
+      );
 
-      actorLogin:
-        actor.githubLogin,
-    }),
+    if (!updated) {
+      throw new Error(
+        "The draft changed before your save completed. Reload the page.",
+      );
+    }
 
-    AuditLog.create({
-      action: "UPDATE",
+    await Promise.all([
+      ContentRevisionModel.create({
+        entryId: updated._id,
+        revisionNumber: updated.draftVersion,
+        kind: "DRAFT_SAVED",
+        snapshot: input.draftData,
+        actorLogin: actor.githubLogin,
+      }),
 
-      actorLogin:
-        actor.githubLogin,
+      AuditLogModel.create({
+        action: "UPDATE",
+        actorLogin: actor.githubLogin,
+        entityType: "ContentEntry",
+        entityId: updated._id,
+        description:
+          `Saved draft version ${updated.draftVersion}: ${updated.title}`,
+      }),
+    ]);
 
-      entityType:
-        "ContentEntry",
+    return updated;
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw new Error(
+        "Another entry already uses this content type and slug.",
+      );
+    }
 
-      entityId:
-        updated._id,
-
-      description:
-        `Saved draft version ${nextVersion}: ${updated.title}`,
-    }),
-  ]);
-
-  return updated;
+    throw error;
+  }
 }
 
 export async function publishEntry(
   id: string,
+  expectedDraftVersion: number,
   actor: Actor,
 ) {
-  ensureObjectId(id);
+  validateObjectId(id);
   await dbConnect();
 
-  const current =
-    await ContentEntry.findById(id)
-      .lean();
+  const current = await ContentEntryModel.findById(id)
+    .lean();
 
   if (!current) {
     throw new Error(
-      "Content entry was not found.",
+      "The content entry could not be found.",
     );
   }
 
-  if (
-    current.workflowStatus ===
-    "ARCHIVED"
-  ) {
+  if (current.workflowStatus === "ARCHIVED") {
     throw new Error(
       "Archived content cannot be published.",
     );
   }
 
-  const publishedAt =
-    new Date();
+  if (current.draftVersion !== expectedDraftVersion) {
+    throw new Error(
+      "The draft changed before publication. Reload the page.",
+    );
+  }
 
-  /*
-   * This single-document update is atomic.
-   *
-   * The working draft is copied into the
-   * separate public snapshot.
-   */
+  const publishedAt = new Date();
+
   const updated =
-    await ContentEntry.findOneAndUpdate(
+    await ContentEntryModel.findOneAndUpdate(
       {
         _id: id,
-
-        draftVersion:
-          current.draftVersion,
+        draftVersion: expectedDraftVersion,
       },
 
       {
         $set: {
-          publishedData:
-            current.draftData,
+          publishedData: current.draftData,
 
           publishedVersion:
             current.draftVersion,
 
-          publicationStatus:
-            "PUBLISHED",
-
-          workflowStatus:
-            "SYNCED",
+          publicationStatus: "PUBLISHED",
+          workflowStatus: "SYNCED",
 
           publishedAt,
-
           unpublishedAt: null,
         },
       },
@@ -313,103 +270,73 @@ export async function publishEntry(
 
   if (!updated) {
     throw new Error(
-      "The draft changed before publication completed. Reload the entry before publishing.",
+      "The content changed before publication completed.",
     );
   }
 
-  const [
-    revision,
-    job,
-  ] = await Promise.all([
-    ContentRevision.create({
+  const job = await PublishJobModel.create({
+    entryId: updated._id,
+    action: "PUBLISH",
+    status: "PENDING",
+
+    payload: {
+      contentId: updated._id.toString(),
+      type: updated.type,
+      slug: updated.slug,
+      publicPath: updated.publicPath,
+      version: updated.publishedVersion,
+      action: "PUBLISH",
+    },
+  });
+
+  await Promise.all([
+    ContentRevisionModel.create({
       entryId: updated._id,
-
-      revisionNumber:
-        current.draftVersion,
-
+      revisionNumber: current.draftVersion,
       kind: "PUBLISHED",
-
-      snapshot:
-        current.draftData,
+      snapshot: current.draftData,
 
       note:
         "Copied the working draft into the public snapshot.",
 
-      actorLogin:
-        actor.githubLogin,
+      actorLogin: actor.githubLogin,
     }),
 
-    PublishJob.create({
-      entryId:
-        updated._id,
-
+    AuditLogModel.create({
       action: "PUBLISH",
-
-      status: "PENDING",
-
-      payload: {
-        contentId:
-          updated._id.toString(),
-
-        type:
-          updated.type,
-
-        slug:
-          updated.slug,
-
-        publicPath:
-          updated.publicPath,
-
-        version:
-          updated.publishedVersion,
-      },
-    }),
-
-    AuditLog.create({
-      action: "PUBLISH",
-
-      actorLogin:
-        actor.githubLogin,
-
-      entityType:
-        "ContentEntry",
-
-      entityId:
-        updated._id,
+      actorLogin: actor.githubLogin,
+      entityType: "ContentEntry",
+      entityId: updated._id,
 
       description:
         `Published ${updated.title} version ${updated.publishedVersion}`,
     }),
   ]);
 
-  return {
-    entry: updated,
-    revision,
-    job,
-  };
+  await processPublishJob(job._id.toString());
+
+  return updated;
 }
 
 export async function unpublishEntry(
   id: string,
   actor: Actor,
 ) {
-  ensureObjectId(id);
+  validateObjectId(id);
   await dbConnect();
 
   const updated =
-    await ContentEntry.findByIdAndUpdate(
-      id,
+    await ContentEntryModel.findOneAndUpdate(
+      {
+        _id: id,
+        publicationStatus: "PUBLISHED",
+      },
 
       {
         $set: {
-          publicationStatus:
-            "UNPUBLISHED",
-
-          workflowStatus:
-            "DRAFT",
-
-          unpublishedAt:
-            new Date(),
+          publicationStatus: "UNPUBLISHED",
+          workflowStatus: "DRAFT",
+          unpublishedAt: new Date(),
         },
       },
 
@@ -421,44 +348,50 @@ export async function unpublishEntry(
 
   if (!updated) {
     throw new Error(
-      "Content entry was not found.",
+      "The published entry could not be found.",
     );
   }
 
-  await Promise.all([
-    PublishJob.create({
-      entryId:
-        updated._id,
+  const job = await PublishJobModel.create({
+    entryId: updated._id,
+    action: "UNPUBLISH",
+    status: "PENDING",
 
+    payload: {
+      contentId: updated._id.toString(),
+      type: updated.type,
+      slug: updated.slug,
+      publicPath: updated.publicPath,
+      version: updated.publishedVersion,
       action: "UNPUBLISH",
+    },
+  });
 
-      status: "PENDING",
+  await Promise.all([
+    ContentRevisionModel.create({
+      entryId: updated._id,
+      revisionNumber: updated.draftVersion,
+      kind: "UNPUBLISHED",
+      snapshot: updated.draftData,
 
-      payload: {
-        contentId:
-          updated._id.toString(),
+      note:
+        "Removed the entry from the public snapshot API.",
 
-        publicPath:
-          updated.publicPath,
-      },
+      actorLogin: actor.githubLogin,
     }),
 
-    AuditLog.create({
+    AuditLogModel.create({
       action: "UNPUBLISH",
-
-      actorLogin:
-        actor.githubLogin,
-
-      entityType:
-        "ContentEntry",
-
-      entityId:
-        updated._id,
+      actorLogin: actor.githubLogin,
+      entityType: "ContentEntry",
+      entityId: updated._id,
 
       description:
         `Unpublished ${updated.title}`,
     }),
   ]);
+
+  await processPublishJob(job._id.toString());
 
   return updated;
 }

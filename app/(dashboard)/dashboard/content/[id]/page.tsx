@@ -2,20 +2,27 @@ import {
   isValidObjectId,
 } from "mongoose";
 import { notFound } from "next/navigation";
+
+import ContentEditorForm from "@/components/dashboard/ContentEditorForm";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
+import PublicationControls from "@/components/dashboard/PublicationControls";
+import RelationshipManager from "@/components/dashboard/RelationshipManager";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+
 import { requireOwner } from "@/lib/authorization";
 import { dbConnect } from "@/lib/mongodb";
-import ContentEntry from "@/models/ContentEntry";
-import ContentRevision from "@/models/ContentRevision";
-import {
-  publishContent,
-  saveContentDraft,
-  unpublishContent,
-} from "../actions";
 
-export const runtime =
-  "nodejs";
+import ContentEntryModel from "@/models/ContentEntry";
+import ContentRelationModel from "@/models/ContentRelation";
+import ContentRevisionModel from "@/models/ContentRevision";
+
+import type {
+  JsonObject,
+  RelationKind,
+} from "@/types/content";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{
@@ -23,14 +30,21 @@ type PageProps = {
   }>;
 };
 
+function serializeJsonObject(
+  value: unknown,
+): JsonObject {
+  return JSON.parse(
+    JSON.stringify(value ?? {}),
+  ) as JsonObject;
+}
+
 export default async function ContentEditorPage({
   params,
 }: PageProps) {
   const session =
     await requireOwner();
 
-  const { id } =
-    await params;
+  const { id } = await params;
 
   if (!isValidObjectId(id)) {
     notFound();
@@ -41,17 +55,45 @@ export default async function ContentEditorPage({
   const [
     entry,
     revisions,
+    candidates,
+    relationships,
   ] = await Promise.all([
-    ContentEntry.findById(id)
+    ContentEntryModel.findById(id)
       .lean(),
 
-    ContentRevision.find({
+    ContentRevisionModel.find({
       entryId: id,
     })
       .sort({
         createdAt: -1,
       })
-      .limit(10)
+      .limit(12)
+      .lean(),
+
+    ContentEntryModel.find({
+      _id: {
+        $ne: id,
+      },
+    })
+      .select({
+        title: 1,
+        type: 1,
+        slug: 1,
+        publicationStatus: 1,
+      })
+      .sort({
+        type: 1,
+        title: 1,
+      })
+      .lean(),
+
+    ContentRelationModel.find({
+      sourceId: id,
+    })
+      .sort({
+        sortOrder: 1,
+        createdAt: 1,
+      })
       .lean(),
   ]);
 
@@ -59,14 +101,29 @@ export default async function ContentEditorPage({
     notFound();
   }
 
+  const currentDraftVersion =
+    typeof entry.draftVersion ===
+      "number" &&
+    Number.isInteger(
+      entry.draftVersion,
+    ) &&
+    entry.draftVersion > 0
+      ? entry.draftVersion
+      : 1;
+
+  const currentPublishedVersion =
+    typeof entry.publishedVersion ===
+    "number"
+      ? entry.publishedVersion
+      : null;
+
   return (
     <>
       <DashboardHeader
         title={entry.title}
-        description={`${entry.type} · Draft version ${entry.draftVersion}`}
+        description={`${entry.type} · Working draft version ${currentDraftVersion}`}
         githubLogin={
-          session.user
-            .githubLogin
+          session.user.githubLogin
         }
       />
 
@@ -84,263 +141,142 @@ export default async function ContentEditorPage({
         />
 
         <span>
-          Published version:{" "}
-          {entry.publishedVersion ??
-            "None"}
+          Public version:{" "}
+          {currentPublishedVersion
+            ? `v${currentPublishedVersion}`
+            : "None"}
         </span>
       </section>
 
-      <form
-        action={
-          saveContentDraft
+      <ContentEditorForm
+        mode="edit"
+        initialEntry={{
+          id,
+          type: entry.type,
+          slug: entry.slug,
+          title: entry.title,
+          summary: entry.summary,
+
+          publicPath:
+            entry.publicPath ?? "",
+
+          featured:
+            entry.featured ?? false,
+
+          draftVersion:
+            currentDraftVersion,
+
+          draftData:
+            serializeJsonObject(
+              entry.draftData,
+            ),
+        }}
+      />
+
+      <PublicationControls
+        id={id}
+        draftVersion={
+          currentDraftVersion
         }
-        className="dashboard-editor"
-      >
-        <input
-          type="hidden"
-          name="id"
-          value={id}
-        />
+        publishedVersion={
+          currentPublishedVersion
+        }
+        publicationStatus={
+          entry.publicationStatus
+        }
+      />
 
-        <div className="dashboard-editor__grid">
-          <label>
-            <span>
-              Content type
-            </span>
+      <RelationshipManager
+        sourceId={id}
+        candidates={candidates.map(
+          (candidate) => ({
+            id:
+              candidate._id.toString(),
 
-            <select
-              name="type"
-              defaultValue={
-                entry.type
-              }
-            >
-              <option value="PAGE">
-                Page
-              </option>
+            title:
+              candidate.title,
 
-              <option value="PROJECT">
-                Project
-              </option>
+            type:
+              candidate.type,
 
-              <option value="RESEARCH">
-                Research
-              </option>
+            slug:
+              candidate.slug,
 
-              <option value="FRAMEWORK">
-                Framework
-              </option>
+            publicationStatus:
+              candidate.publicationStatus,
+          }),
+        )}
+        relationships={relationships.map(
+          (relationship) => ({
+            id:
+              relationship._id.toString(),
 
-              <option value="WRITING">
-                Writing
-              </option>
+            targetId:
+              relationship.targetId.toString(),
 
-              <option value="MEDIA">
-                Media
-              </option>
+            relationKind:
+              relationship.relationKind as RelationKind,
 
-              <option value="ARCHIVE">
-                Archive
-              </option>
-            </select>
-          </label>
+            description:
+              relationship.description ??
+              null,
 
-          <label>
-            <span>Slug</span>
+            sortOrder:
+              relationship.sortOrder,
+          }),
+        )}
+      />
 
-            <input
-              name="slug"
-              defaultValue={
-                entry.slug
-              }
-              required
-            />
-          </label>
-        </div>
-
-        <label>
-          <span>Title</span>
-
-          <input
-            name="title"
-            defaultValue={
-              entry.title
-            }
-            required
-          />
-        </label>
-
-        <label>
-          <span>Summary</span>
-
-          <textarea
-            name="summary"
-            rows={4}
-            defaultValue={
-              entry.summary
-            }
-          />
-        </label>
-
-        <label>
-          <span>
-            Public path
-          </span>
-
-          <input
-            name="publicPath"
-            defaultValue={
-              entry.publicPath ??
-              ""
-            }
-          />
-        </label>
-
-        <label>
-          <span>
-            Working draft JSON
-          </span>
-
-          <textarea
-            name="draftData"
-            rows={30}
-            spellCheck={false}
-            defaultValue={
-              JSON.stringify(
-                entry.draftData,
-                null,
-                2,
-              )
-            }
-          />
-        </label>
-
-        <footer>
-          <p>
-            Saving creates a
-            new private revision.
-          </p>
-
-          <button
-            type="submit"
-            className="dashboard-primary-button"
-          >
-            Save draft
-          </button>
-        </footer>
-      </form>
-
-      <section className="dashboard-publish-panel">
-        <div>
-          <span>
-            Publication boundary
-          </span>
-
-          <h2>
-            Copy this draft into
-            the public snapshot
-          </h2>
-
-          <p>
-            Publishing creates a
-            separate public copy.
-            Future draft edits will
-            not modify that copy.
-          </p>
-        </div>
-
-        <div className="dashboard-publish-actions">
-          <form
-            action={
-              publishContent
-            }
-          >
-            <input
-              type="hidden"
-              name="id"
-              value={id}
-            />
-
-            <button
-              type="submit"
-              className="dashboard-publish-button"
-            >
-              Publish version{" "}
-              {
-                entry.draftVersion
-              }
-            </button>
-          </form>
-
-          {entry.publicationStatus ===
-            "PUBLISHED" && (
-            <form
-              action={
-                unpublishContent
-              }
-            >
-              <input
-                type="hidden"
-                name="id"
-                value={id}
-              />
-
-              <button
-                type="submit"
-                className="dashboard-secondary-button"
-              >
-                Unpublish
-              </button>
-            </form>
-          )}
-        </div>
-      </section>
-
-      <section className="dashboard-revisions">
+      <section className="revision-panel">
         <header>
           <span>
             Revision history
           </span>
 
           <h2>
-            Recent changes
+            Recorded changes
           </h2>
         </header>
 
-        {revisions.map(
-          (revision) => (
-            <article
-              key={
-                revision._id.toString()
-              }
-            >
-              <span>
-                v
-                {
-                  revision.revisionNumber
+        <div className="revision-list">
+          {revisions.map(
+            (revision) => (
+              <article
+                key={
+                  revision._id.toString()
                 }
-              </span>
-
-              <div>
-                <strong>
-                  {revision.kind}
-                </strong>
-
-                <small>
-                  @
+              >
+                <span>
+                  v
                   {
-                    revision.actorLogin
+                    revision.revisionNumber
                   }
-                </small>
-              </div>
+                </span>
 
-              <time>
-                {revision.createdAt.toLocaleString(
-                  "en-US",
-                )}
-              </time>
-            </article>
-          ),
-        )}
+                <div>
+                  <strong>
+                    {revision.kind}
+                  </strong>
+
+                  <small>
+                    @
+                    {
+                      revision.actorLogin
+                    }
+                  </small>
+                </div>
+
+                <time>
+                  {new Date(
+                    revision.createdAt,
+                  ).toLocaleString(
+                    "en-US",
+                  )}
+                </time>
+              </article>
+            ),
+          )}
+        </div>
       </section>
     </>
   );

@@ -1,47 +1,97 @@
 import {
-  InferSchemaType,
-  Model,
+  type Model,
+  type Types,
   Schema,
   model,
   models,
 } from "mongoose";
 
+export const analyticsEventNames = [
+  "PAGE_VIEW",
+  "EXTERNAL_CLICK",
+  "CONTACT_SUBMIT",
+  "SEARCH",
+] as const;
+
+export type AnalyticsEventName =
+  (typeof analyticsEventNames)[number];
+
+export interface AnalyticsEvent {
+  _id: Types.ObjectId;
+
+  eventName: AnalyticsEventName;
+
+  path: string | null;
+  targetUrl: string | null;
+  referrer: string | null;
+
+  sessionHash: string;
+
+  country: string | null;
+  deviceType:
+    | "desktop"
+    | "mobile"
+    | "tablet"
+    | "unknown";
+
+  metadata:
+    | Record<string, unknown>
+    | null;
+
+  occurredAt: Date;
+  createdAt: Date;
+}
+
 const AnalyticsEventSchema =
-  new Schema(
+  new Schema<AnalyticsEvent>(
     {
       eventName: {
         type: String,
+        enum: analyticsEventNames,
         required: true,
-        trim: true,
-        maxlength: 100,
         index: true,
       },
 
       path: {
         type: String,
         default: null,
+        maxlength: 500,
         index: true,
+      },
+
+      targetUrl: {
+        type: String,
+        default: null,
+        maxlength: 2_000,
       },
 
       referrer: {
         type: String,
         default: null,
+        maxlength: 2_000,
       },
 
       sessionHash: {
         type: String,
-        default: null,
+        required: true,
         index: true,
       },
 
       country: {
         type: String,
         default: null,
+        maxlength: 10,
       },
 
       deviceType: {
         type: String,
-        default: null,
+        enum: [
+          "desktop",
+          "mobile",
+          "tablet",
+          "unknown",
+        ],
+        default: "unknown",
       },
 
       metadata: {
@@ -56,11 +106,12 @@ const AnalyticsEventSchema =
       },
     },
     {
-      collection:
-        "analytics_events",
+      timestamps: {
+        createdAt: true,
+        updatedAt: false,
+      },
 
-      timestamps: false,
-
+      collection: "analytics_events",
       minimize: false,
     },
   );
@@ -75,16 +126,16 @@ AnalyticsEventSchema.index({
   occurredAt: -1,
 });
 
-export type AnalyticsEventDocument =
-  InferSchemaType<
-    typeof AnalyticsEventSchema
-  >;
+AnalyticsEventSchema.index({
+  sessionHash: 1,
+  occurredAt: -1,
+});
 
-const AnalyticsEvent =
-  (models.AnalyticsEvent as Model<AnalyticsEventDocument>) ||
-  model<AnalyticsEventDocument>(
+const AnalyticsEventModel =
+  (models.AnalyticsEvent as Model<AnalyticsEvent>) ||
+  model<AnalyticsEvent>(
     "AnalyticsEvent",
     AnalyticsEventSchema,
   );
 
-export default AnalyticsEvent;
+export default AnalyticsEventModel;

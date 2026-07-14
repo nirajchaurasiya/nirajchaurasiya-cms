@@ -1,289 +1,187 @@
 "use server";
 
-import {
-  revalidatePath,
-} from "next/cache";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+
+import { requireOwner } from "@/lib/authorization";
 import {
   createDraft,
   publishEntry,
   saveDraft,
   unpublishEntry,
 } from "@/lib/content-service";
-import { requireOwner } from "@/lib/authorization";
-import {
-  contentTypes,
-  type ContentType,
-  type JsonObject,
-} from "@/types/content";
+import { parseContentForm } from "@/lib/content-validation";
 
-const ContentFormSchema =
-  z.object({
-    id:
-      z.string().optional(),
+type ContentActionState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
 
-    type:
-      z.enum(contentTypes),
+function getErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "The operation could not be completed.";
+}
 
-    slug:
-      z
-        .string()
-        .trim()
-        .min(2)
-        .max(160)
-        .regex(
-          /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-          "Use lowercase letters, numbers, and hyphens.",
-        ),
+export async function createContentAction(
+  _previousState: ContentActionState,
+  formData: FormData,
+): Promise<ContentActionState> {
+  const session = await requireOwner();
 
-    title:
-      z
-        .string()
-        .trim()
-        .min(2)
-        .max(240),
-
-    summary:
-      z
-        .string()
-        .trim()
-        .max(1_200),
-
-    publicPath:
-      z
-        .string()
-        .trim()
-        .max(300)
-        .optional(),
-
-    draftData:
-      z.string().min(2),
-  });
-
-function parseJson(
-  value: string,
-): JsonObject {
-  let parsed: unknown;
+  let createdEntryId: string;
 
   try {
-    parsed =
-      JSON.parse(value);
-  } catch {
-    throw new Error(
-      "Content data must be valid JSON.",
-    );
-  }
+    const input = parseContentForm(formData);
 
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed)
-  ) {
-    throw new Error(
-      "Content data must be a JSON object.",
-    );
-  }
-
-  return parsed as JsonObject;
-}
-
-function parseContentForm(
-  formData: FormData,
-) {
-  const result =
-    ContentFormSchema.safeParse({
-      id:
-        formData.get("id") ||
-        undefined,
-
-      type:
-        formData.get("type"),
-
-      slug:
-        formData.get("slug"),
-
-      title:
-        formData.get("title"),
-
-      summary:
-        formData.get("summary") ??
-        "",
-
-      publicPath:
-        formData.get(
-          "publicPath",
-        ) || undefined,
-
-      draftData:
-        formData.get(
-          "draftData",
-        ),
+    const entry = await createDraft(input, {
+      githubLogin: session.user.githubLogin,
     });
 
-  if (!result.success) {
-    throw new Error(
-      result.error.issues
-        .map(
-          (issue) =>
-            issue.message,
-        )
-        .join(" "),
-    );
+    createdEntryId = entry._id.toString();
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/content");
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(error),
+    };
   }
 
-  return {
-    ...result.data,
-
-    type:
-      result.data
-        .type as ContentType,
-
-    draftData:
-      parseJson(
-        result.data.draftData,
-      ),
-  };
+  redirect(`/dashboard/content/${createdEntryId}`);
 }
 
-export async function createContentDraft(
+export async function updateContentAction(
+  _previousState: ContentActionState,
   formData: FormData,
-) {
-  const session =
-    await requireOwner();
+): Promise<ContentActionState> {
+  const session = await requireOwner();
 
-  const input =
-    parseContentForm(
-      formData,
-    );
+  try {
+    const input = parseContentForm(formData);
 
-  const entry =
-    await createDraft(
+    if (
+      !input.id ||
+      input.expectedDraftVersion === undefined
+    ) {
+      throw new Error(
+        "The content ID and draft version are required.",
+      );
+    }
+
+    const updated = await saveDraft(
+      input.id,
+      input.expectedDraftVersion,
       input,
-
       {
-        githubLogin:
-          session.user
-            .githubLogin,
+        githubLogin: session.user.githubLogin,
       },
     );
 
-  redirect(
-    `/dashboard/content/${entry._id.toString()}`,
-  );
-}
-
-export async function saveContentDraft(
-  formData: FormData,
-) {
-  const session =
-    await requireOwner();
-
-  const input =
-    parseContentForm(
-      formData,
+    revalidatePath(
+      `/dashboard/content/${input.id}`,
     );
 
-  if (!input.id) {
-    throw new Error(
-      "Content ID is required.",
-    );
+    revalidatePath("/dashboard/content");
+    revalidatePath("/dashboard");
+
+    return {
+      status: "success",
+      message:
+        `Draft version ${updated.draftVersion} was saved. Reload the page before editing again.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(error),
+    };
   }
-
-  await saveDraft(
-    input.id,
-    input,
-
-    {
-      githubLogin:
-        session.user
-          .githubLogin,
-    },
-  );
-
-  revalidatePath(
-    `/dashboard/content/${input.id}`,
-  );
-
-  revalidatePath(
-    "/dashboard/content",
-  );
-
-  revalidatePath(
-    "/dashboard",
-  );
 }
 
-export async function publishContent(
+export async function publishContentAction(
+  _previousState: ContentActionState,
   formData: FormData,
-) {
-  const session =
-    await requireOwner();
+): Promise<ContentActionState> {
+  const session = await requireOwner();
 
-  const id =
-    z
+  try {
+    const id = z
       .string()
       .min(1)
+      .parse(formData.get("id"));
+
+    const expectedDraftVersion = z.coerce
+      .number()
+      .int()
+      .positive()
       .parse(
-        formData.get("id"),
+        formData.get("expectedDraftVersion"),
       );
 
-  await publishEntry(
-    id,
+    const published = await publishEntry(
+      id,
+      expectedDraftVersion,
+      {
+        githubLogin: session.user.githubLogin,
+      },
+    );
 
-    {
-      githubLogin:
-        session.user
-          .githubLogin,
-    },
-  );
+    revalidatePath(
+      `/dashboard/content/${id}`,
+    );
 
-  revalidatePath(
-    `/dashboard/content/${id}`,
-  );
+    revalidatePath("/dashboard/content");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/publishing");
 
-  revalidatePath(
-    "/dashboard/content",
-  );
-
-  revalidatePath(
-    "/dashboard",
-  );
+    return {
+      status: "success",
+      message:
+        `Version ${published.publishedVersion} is now public.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(error),
+    };
+  }
 }
 
-export async function unpublishContent(
+export async function unpublishContentAction(
+  _previousState: ContentActionState,
   formData: FormData,
-) {
-  const session =
-    await requireOwner();
+): Promise<ContentActionState> {
+  const session = await requireOwner();
 
-  const id =
-    z
+  try {
+    const id = z
       .string()
       .min(1)
-      .parse(
-        formData.get("id"),
-      );
+      .parse(formData.get("id"));
 
-  await unpublishEntry(
-    id,
+    await unpublishEntry(id, {
+      githubLogin: session.user.githubLogin,
+    });
 
-    {
-      githubLogin:
-        session.user
-          .githubLogin,
-    },
-  );
+    revalidatePath(
+      `/dashboard/content/${id}`,
+    );
 
-  revalidatePath(
-    `/dashboard/content/${id}`,
-  );
+    revalidatePath("/dashboard/content");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/publishing");
 
-  revalidatePath(
-    "/dashboard/content",
-  );
-
-  revalidatePath(
-    "/dashboard",
-  );
+    return {
+      status: "success",
+      message:
+        "The entry is no longer public.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(error),
+    };
+  }
 }

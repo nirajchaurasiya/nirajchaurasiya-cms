@@ -77,6 +77,7 @@ const ContactMessageSchema =
       source: {
         type: String,
         default: "nirajchaurasiya.com",
+        trim: true,
       },
 
       status: {
@@ -124,6 +125,11 @@ ContactMessageSchema.index({
   receivedAt: -1,
 });
 
+ContactMessageSchema.index({
+  email: 1,
+  receivedAt: -1,
+});
+
 const ContactMessageModel =
   (models.ContactMessage as Model<ContactMessage>) ||
   model<ContactMessage>(
@@ -131,4 +137,4 @@ const ContactMessageModel =
     ContactMessageSchema,
   );
 
-export default ContactMessageModel; 
+export default ContactMessageModel;

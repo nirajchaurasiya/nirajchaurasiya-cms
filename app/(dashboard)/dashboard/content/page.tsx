@@ -1,3 +1,8 @@
+import Link from "next/link";
+import {
+  ArrowUpRight,
+  Plus,
+} from "lucide-react";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { requireOwner } from "@/lib/authorization";
@@ -32,17 +37,18 @@ export default async function ContentPage({
 
   await dbConnect();
 
-  const entries = await ContentEntryModel.find(
-    selectedType
-      ? {
-          type: selectedType,
-        }
-      : {},
-  )
-    .sort({
-      updatedAt: -1,
-    })
-    .lean();
+  const entries =
+    await ContentEntryModel.find(
+      selectedType
+        ? {
+            type: selectedType,
+          }
+        : {},
+    )
+      .sort({
+        updatedAt: -1,
+      })
+      .lean();
 
   return (
     <>
@@ -52,7 +58,7 @@ export default async function ContentPage({
             ? `${selectedType.toLowerCase()} content`
             : "All Content"
         }
-        description="Working drafts and public content snapshots."
+        description="Manage private drafts, revisions, and published snapshots."
         githubLogin={
           session.user.githubLogin
         }
@@ -60,24 +66,37 @@ export default async function ContentPage({
 
       <section className="dashboard-content-index">
         <header>
-          <strong>{entries.length}</strong>
+          <div>
+            <strong>{entries.length}</strong>
 
-          <span>
-            {entries.length === 1
-              ? "entry"
-              : "entries"}
-          </span>
+            <span>
+              {entries.length === 1
+                ? "entry"
+                : "entries"}
+            </span>
+          </div>
+
+          <Link
+            href="/dashboard/content/new"
+            className="dashboard-primary-button"
+          >
+            <Plus size={16} />
+            New content
+          </Link>
         </header>
 
         <div className="dashboard-content-list">
           {entries.map((entry) => (
-            <article
-              key={entry._id.toString()}
+            <Link
+              href={`/dashboard/content/${entry._id.toString()}`}
               className="dashboard-content-row"
+              key={entry._id.toString()}
             >
               <div>
                 <small>{entry.type}</small>
+
                 <h2>{entry.title}</h2>
+
                 <p>{entry.summary}</p>
               </div>
 
@@ -93,8 +112,10 @@ export default async function ContentPage({
                 <span>
                   Draft v{entry.draftVersion}
                 </span>
+
+                <ArrowUpRight size={17} />
               </div>
-            </article>
+            </Link>
           ))}
 
           {entries.length === 0 && (
@@ -102,10 +123,17 @@ export default async function ContentPage({
               <h2>No content exists yet.</h2>
 
               <p>
-                The visual content editor will create
-                the first MongoDB entry in the next
-                phase.
+                Create the first private MongoDB
+                draft.
               </p>
+
+              <Link
+                href="/dashboard/content/new"
+                className="dashboard-primary-button"
+              >
+                <Plus size={16} />
+                Create content
+              </Link>
             </div>
           )}
         </div>
