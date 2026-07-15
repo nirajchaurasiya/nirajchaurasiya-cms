@@ -1,9 +1,5 @@
 import Link from "next/link";
-import {
-  ArrowUpRight,
-  Inbox,
-  Search,
-} from "lucide-react";
+import { ArrowUpRight, Inbox, Search } from "lucide-react";
 
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
@@ -13,10 +9,7 @@ import { dbConnect } from "@/lib/mongodb";
 
 import ContactMessageModel from "@/models/ContactMessage";
 
-import {
-  messageStatuses,
-  type MessageStatus,
-} from "@/types/content";
+import { messageStatuses, type MessageStatus } from "@/types/content";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,67 +21,43 @@ type PageProps = {
   }>;
 };
 
-function escapeRegularExpression(
-  value: string,
-) {
-  return value.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&",
-  );
+function escapeRegularExpression(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function formatDate(
-  value: Date | string,
-) {
-  return new Date(value).toLocaleString(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    },
-  );
+function formatDate(value: Date | string) {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-export default async function MessagesPage({
-  searchParams,
-}: PageProps) {
+export default async function MessagesPage({ searchParams }: PageProps) {
   const session = await requireOwner();
 
-  const {
-    status,
-    q,
-  } = await searchParams;
+  const { status, q } = await searchParams;
 
-  const selectedStatus =
-    messageStatuses.includes(
-      status as MessageStatus,
-    )
-      ? (status as MessageStatus)
-      : null;
+  const selectedStatus = messageStatuses.includes(status as MessageStatus)
+    ? (status as MessageStatus)
+    : null;
 
-  const searchQuery =
-    q?.trim() ?? "";
+  const searchQuery = q?.trim() ?? "";
 
   await dbConnect();
 
-  const query:
-    Record<string, unknown> = {};
+  const query: Record<string, unknown> = {};
 
   if (selectedStatus) {
     query.status = selectedStatus;
   }
 
   if (searchQuery) {
-    const safeQuery =
-      escapeRegularExpression(
-        searchQuery,
-      );
+    const safeQuery = escapeRegularExpression(searchQuery);
 
-    const expression =
-      new RegExp(safeQuery, "i");
+    const expression = new RegExp(safeQuery, "i");
 
     query.$or = [
       {
@@ -186,29 +155,17 @@ export default async function MessagesPage({
       <DashboardHeader
         title="Messages"
         description="Review contact messages received through the public website."
-        githubLogin={
-          session.user.githubLogin
-        }
+        githubLogin={session.user.githubLogin}
       />
 
       <section className="message-inbox">
         <header className="message-inbox__toolbar">
-          <form
-            className="message-search"
-            action="/dashboard/messages"
-          >
+          <form className="message-search" action="/dashboard/messages">
             {selectedStatus && (
-              <input
-                type="hidden"
-                name="status"
-                value={selectedStatus}
-              />
+              <input type="hidden" name="status" value={selectedStatus} />
             )}
 
-            <Search
-              size={17}
-              strokeWidth={1.7}
-            />
+            <Search size={17} strokeWidth={1.7} />
 
             <input
               type="search"
@@ -217,28 +174,19 @@ export default async function MessagesPage({
               placeholder="Search sender, email, subject, or message..."
             />
 
-            <button type="submit">
-              Search
-            </button>
+            <button type="submit">Search</button>
           </form>
 
           <div className="message-filters">
             {filters.map((filter) => {
-              const parameters =
-                new URLSearchParams();
+              const parameters = new URLSearchParams();
 
               if (filter.value) {
-                parameters.set(
-                  "status",
-                  filter.value,
-                );
+                parameters.set("status", filter.value);
               }
 
               if (searchQuery) {
-                parameters.set(
-                  "q",
-                  searchQuery,
-                );
+                parameters.set("q", searchQuery);
               }
 
               const href =
@@ -247,10 +195,8 @@ export default async function MessagesPage({
                   : "/dashboard/messages";
 
               const isActive =
-                selectedStatus ===
-                  filter.value ||
-                (!selectedStatus &&
-                  filter.value === "");
+                selectedStatus === filter.value ||
+                (!selectedStatus && filter.value === "");
 
               return (
                 <Link
@@ -264,9 +210,7 @@ export default async function MessagesPage({
                 >
                   {filter.label}
 
-                  <span>
-                    {filter.count}
-                  </span>
+                  <span>{filter.count}</span>
                 </Link>
               );
             })}
@@ -285,73 +229,42 @@ export default async function MessagesPage({
               key={message._id.toString()}
             >
               <div className="message-row__sender">
-                <span>
-                  {message.name
-                    .slice(0, 1)
-                    .toUpperCase()}
-                </span>
+                <span>{message.name.slice(0, 1).toUpperCase()}</span>
 
                 <div>
-                  <strong>
-                    {message.name}
-                  </strong>
+                  <strong>{message.name}</strong>
 
-                  <small>
-                    {message.email}
-                  </small>
+                  <small>{message.email}</small>
                 </div>
               </div>
 
               <div className="message-row__content">
                 <div>
-                  <small>
-                    {message.reason}
-                  </small>
+                  <small>{message.reason}</small>
 
-                  <h2>
-                    {message.subject}
-                  </h2>
+                  <h2>{message.subject}</h2>
                 </div>
 
-                <p>
-                  {message.message}
-                </p>
+                <p>{message.message}</p>
               </div>
 
               <div className="message-row__metadata">
-                <StatusBadge
-                  value={message.status}
-                />
+                <StatusBadge value={message.status} />
 
-                <time>
-                  {formatDate(
-                    message.receivedAt,
-                  )}
-                </time>
+                <time>{formatDate(message.receivedAt)}</time>
               </div>
 
-              <ArrowUpRight
-                size={17}
-                strokeWidth={1.8}
-              />
+              <ArrowUpRight size={17} strokeWidth={1.8} />
             </Link>
           ))}
 
           {messages.length === 0 && (
             <div className="message-empty">
-              <Inbox
-                size={27}
-                strokeWidth={1.5}
-              />
+              <Inbox size={27} strokeWidth={1.5} />
 
-              <h2>
-                No matching messages.
-              </h2>
+              <h2>No matching messages.</h2>
 
-              <p>
-                New messages from the public
-                contact form will appear here.
-              </p>
+              <p>New messages from the public contact form will appear here.</p>
             </div>
           )}
         </div>

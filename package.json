@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:repair-revisions": "node scripts/repair-content-revisions.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.24.0",

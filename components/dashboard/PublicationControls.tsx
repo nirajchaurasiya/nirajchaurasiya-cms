@@ -1,13 +1,9 @@
 "use client";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Globe2,
-  GlobeLock,
-} from "lucide-react";
-import { useActionState } from "react";
+import { AlertCircle, CheckCircle2, Globe2, GlobeLock } from "lucide-react";
+import { useActionState, useEffect } from "react";
 
+import { useRouter } from "next/navigation";
 import {
   publishContentAction,
   unpublishContentAction,
@@ -36,6 +32,7 @@ export default function PublicationControls({
   publishedVersion,
   publicationStatus,
 }: PublicationControlsProps) {
+  const router = useRouter();
   const safeDraftVersion =
     typeof draftVersion === "number" &&
     Number.isInteger(draftVersion) &&
@@ -43,42 +40,37 @@ export default function PublicationControls({
       ? draftVersion
       : 1;
 
-  const [
-    publishState,
-    publishAction,
-    publishing,
-  ] = useActionState(
+  const [publishState, publishAction, publishing] = useActionState(
     publishContentAction,
     initialContentActionState,
   );
 
-  const [
-    unpublishState,
-    unpublishAction,
-    unpublishing,
-  ] = useActionState(
+  const [unpublishState, unpublishAction, unpublishing] = useActionState(
     unpublishContentAction,
     initialContentActionState,
   );
 
-  const state =
-    publishState.status !== "idle"
-      ? publishState
-      : unpublishState;
+  useEffect(() => {
+    if (
+      publishState.status === "success" ||
+      unpublishState.status === "success"
+    ) {
+      router.refresh();
+    }
+  }, [publishState, router, unpublishState]);
+
+  const state = publishState.status !== "idle" ? publishState : unpublishState;
 
   return (
     <section className="publication-panel">
       <div className="publication-panel__content">
         <span>Publication boundary</span>
 
-        <h2>
-          Copy the current draft into the public snapshot
-        </h2>
+        <h2>Copy the current draft into the public snapshot</h2>
 
         <p>
-          The public website receives a separate copy.
-          Later edits remain private until another
-          publication occurs.
+          The public website receives a separate copy. Later edits remain
+          private until another publication occurs.
         </p>
 
         <div className="publication-version-state">
@@ -101,11 +93,7 @@ export default function PublicationControls({
         {state.status !== "idle" && (
           <div
             className={`content-action-message content-action-message--${state.status}`}
-            role={
-              state.status === "error"
-                ? "alert"
-                : "status"
-            }
+            role={state.status === "error" ? "alert" : "status"}
           >
             {state.status === "success" ? (
               <CheckCircle2 size={18} />
@@ -120,11 +108,7 @@ export default function PublicationControls({
 
       <div className="publication-panel__actions">
         <form action={publishAction}>
-          <input
-            type="hidden"
-            name="id"
-            value={id}
-          />
+          <input type="hidden" name="id" value={id} />
 
           <input
             type="hidden"
@@ -139,19 +123,13 @@ export default function PublicationControls({
           >
             <Globe2 size={17} />
 
-            {publishing
-              ? "Publishing..."
-              : `Publish v${safeDraftVersion}`}
+            {publishing ? "Publishing..." : `Publish v${safeDraftVersion}`}
           </button>
         </form>
 
         {publicationStatus === "PUBLISHED" && (
           <form action={unpublishAction}>
-            <input
-              type="hidden"
-              name="id"
-              value={id}
-            />
+            <input type="hidden" name="id" value={id} />
 
             <button
               type="submit"
@@ -160,9 +138,7 @@ export default function PublicationControls({
             >
               <GlobeLock size={17} />
 
-              {unpublishing
-                ? "Unpublishing..."
-                : "Unpublish"}
+              {unpublishing ? "Unpublishing..." : "Unpublish"}
             </button>
           </form>
         )}

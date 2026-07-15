@@ -1,28 +1,19 @@
-import {
-  NextResponse,
-} from "next/server";
-
+import { NextResponse } from "next/server";
+import { Types } from "mongoose";
 import { dbConnect } from "@/lib/mongodb";
 import { safeCompare } from "@/lib/security";
 
 import ContentEntryModel from "@/models/ContentEntry";
 import ContentRelationModel from "@/models/ContentRelation";
 
-import {
-  contentTypes,
-  type ContentType,
-} from "@/types/content";
+import { contentTypes, type ContentType } from "@/types/content";
 
-export const runtime =
-  "nodejs";
+export const runtime = "nodejs";
 
-export const dynamic =
-  "force-dynamic";
+export const dynamic = "force-dynamic";
 
 type PublicEntry = {
-  _id: {
-    toString(): string;
-  };
+  _id: Types.ObjectId;
 
   type: string;
   slug: string;
@@ -36,29 +27,24 @@ type PublicEntry = {
   updatedAt: Date;
 };
 
-export async function GET(
-  request: Request,
-) {
-  const suppliedKey =
-    request.headers.get(
-      "x-api-key",
-    ) ?? "";
+type PublicRelationshipTarget = {
+  _id: Types.ObjectId;
 
-  const expectedKey =
-    process.env
-      .PUBLIC_CONTENT_API_KEY ??
-    "";
+  type: string;
+  slug: string;
+  title: string;
+  publicPath: string | null;
+};
 
-  if (
-    !safeCompare(
-      suppliedKey,
-      expectedKey,
-    )
-  ) {
+export async function GET(request: Request) {
+  const suppliedKey = request.headers.get("x-api-key") ?? "";
+
+  const expectedKey = process.env.PUBLIC_CONTENT_API_KEY ?? "";
+
+  if (!safeCompare(suppliedKey, expectedKey)) {
     return NextResponse.json(
       {
-        message:
-          "Unauthorized",
+        message: "Unauthorized",
       },
 
       {
@@ -67,35 +53,19 @@ export async function GET(
     );
   }
 
-  const url =
-    new URL(request.url);
+  const url = new URL(request.url);
 
-  const rawType =
-    url.searchParams
-      .get("type")
-      ?.trim()
-      .toUpperCase();
+  const rawType = url.searchParams.get("type")?.trim().toUpperCase();
 
-  const requestedSlug =
-    url.searchParams
-      .get("slug")
-      ?.trim()
-      .toLowerCase();
+  const requestedSlug = url.searchParams.get("slug")?.trim().toLowerCase();
 
-  let requestedType:
-    | ContentType
-    | null = null;
+  let requestedType: ContentType | null = null;
 
   if (rawType) {
-    if (
-      !contentTypes.includes(
-        rawType as ContentType,
-      )
-    ) {
+    if (!contentTypes.includes(rawType as ContentType)) {
       return NextResponse.json(
         {
-          message:
-            "Invalid content type.",
+          message: "Invalid content type.",
         },
 
         {
@@ -104,16 +74,13 @@ export async function GET(
       );
     }
 
-    requestedType =
-      rawType as ContentType;
+    requestedType = rawType as ContentType;
   }
 
   await dbConnect();
 
-  const query:
-    Record<string, unknown> = {
-    publicationStatus:
-      "PUBLISHED",
+  const query: Record<string, unknown> = {
+    publicationStatus: "PUBLISHED",
 
     publishedData: {
       $ne: null,
@@ -121,66 +88,41 @@ export async function GET(
   };
 
   if (requestedType) {
-    query.type =
-      requestedType;
+    query.type = requestedType;
   }
 
   if (requestedSlug) {
-    query.slug =
-      requestedSlug;
+    query.slug = requestedSlug;
   }
 
-  const entries =
-    await ContentEntryModel.find(
-      query,
-    )
-      .select({
-        type: 1,
-        slug: 1,
-        title: 1,
-        summary: 1,
-        publicPath: 1,
-        featured: 1,
-        publishedData: 1,
-        publishedVersion: 1,
-        publishedAt: 1,
-        updatedAt: 1,
-      })
-      .sort({
-        featured: -1,
-        publishedAt: -1,
-      })
-      .lean();
+  const publicEntries = await ContentEntryModel.find(query)
+    .select({
+      type: 1,
+      slug: 1,
+      title: 1,
+      summary: 1,
+      publicPath: 1,
+      featured: 1,
+      publishedData: 1,
+      publishedVersion: 1,
+      publishedAt: 1,
+      updatedAt: 1,
+    })
+    .sort({
+      featured: -1,
+      publishedAt: -1,
+    })
+    .lean<PublicEntry[]>();
 
-  const publicEntries =
-    entries as PublicEntry[];
-
-  const publicEntryIds =
-    publicEntries.map(
-      (entry) => entry._id,
-    );
-
-  const entryMap =
-    new Map(
-      publicEntries.map(
-        (entry) => [
-          entry._id.toString(),
-          entry,
-        ],
-      ),
-    );
+  const sourceEntryIds = publicEntries.map((entry) => entry._id);
 
   const relationships =
-    publicEntryIds.length > 0
+    sourceEntryIds.length > 0
       ? await ContentRelationModel.find({
           sourceId: {
-            $in: publicEntryIds,
+            $in: sourceEntryIds,
           },
-
-          targetId: {
-            $in: publicEntryIds,
-          },
-        } as any)
+        })
           .sort({
             sourceId: 1,
             sortOrder: 1,
@@ -189,139 +131,128 @@ export async function GET(
           .lean()
       : [];
 
-  const relationshipsBySource =
-    new Map<
-      string,
-      Array<{
+  const targetEntryIds = [
+    ...new Map(
+      relationships.map((relationship) => [
+        relationship.targetId.toString(),
+        relationship.targetId,
+      ]),
+    ).values(),
+  ];
+
+  const targetEntries =
+    targetEntryIds.length > 0
+      ? await ContentEntryModel.find({
+          _id: {
+            $in: targetEntryIds,
+          },
+
+          publicationStatus: "PUBLISHED",
+
+          publishedData: {
+            $ne: null,
+          },
+        })
+          .select({
+            type: 1,
+            slug: 1,
+            title: 1,
+            publicPath: 1,
+          })
+          .lean<PublicRelationshipTarget[]>()
+      : [];
+
+  const targetMap = new Map(
+    targetEntries.map((target) => [target._id.toString(), target]),
+  );
+
+  const relationshipsBySource = new Map<
+    string,
+    Array<{
+      id: string;
+      kind: string;
+      description: string | null;
+      sortOrder: number;
+
+      target: {
         id: string;
-        kind: string;
-        description:
-          | string
-          | null;
-        sortOrder: number;
-        target: {
-          id: string;
-          type: string;
-          slug: string;
-          title: string;
-          publicPath:
-            | string
-            | null;
-        };
-      }>
-    >();
+        type: string;
+        slug: string;
+        title: string;
+        publicPath: string | null;
+      };
+    }>
+  >();
 
-  for (
-    const relationship
-    of relationships
-  ) {
-    const sourceId =
-      relationship.sourceId.toString();
+  for (const relationship of relationships) {
+    const sourceId = relationship.sourceId.toString();
 
-    const targetId =
-      relationship.targetId.toString();
+    const targetId = relationship.targetId.toString();
 
-    const target =
-      entryMap.get(targetId);
+    const target = targetMap.get(targetId);
 
+    // Unpublished targets must remain private.
     if (!target) {
       continue;
     }
 
-    const existing =
-      relationshipsBySource.get(
-        sourceId,
-      ) ?? [];
+    const currentRelationships = relationshipsBySource.get(sourceId) ?? [];
 
-    existing.push({
-      id:
-        relationship._id.toString(),
+    currentRelationships.push({
+      id: relationship._id.toString(),
 
-      kind:
-        relationship.relationKind,
+      kind: relationship.relationKind,
 
-      description:
-        relationship.description ??
-        null,
+      description: relationship.description ?? null,
 
-      sortOrder:
-        relationship.sortOrder,
+      sortOrder: relationship.sortOrder,
 
       target: {
         id: targetId,
-        type:
-          target.type,
-        slug:
-          target.slug,
-        title:
-          target.title,
-        publicPath:
-          target.publicPath,
+        type: target.type,
+        slug: target.slug,
+        title: target.title,
+
+        publicPath: target.publicPath ?? null,
       },
     });
 
-    relationshipsBySource.set(
-      sourceId,
-      existing,
-    );
+    relationshipsBySource.set(sourceId, currentRelationships);
   }
 
-  const response =
-    NextResponse.json({
-      generatedAt:
-        new Date().toISOString(),
+  const response = NextResponse.json({
+    generatedAt: new Date().toISOString(),
 
-      count:
-        publicEntries.length,
+    count: publicEntries.length,
 
-      entries:
-        publicEntries.map(
-          (entry) => ({
-            id:
-              entry._id.toString(),
+    entries: publicEntries.map((entry) => ({
+      id: entry._id.toString(),
 
-            type:
-              entry.type,
+      type: entry.type,
 
-            slug:
-              entry.slug,
+      slug: entry.slug,
 
-            title:
-              entry.title,
+      title: entry.title,
 
-            summary:
-              entry.summary,
+      summary: entry.summary,
 
-            publicPath:
-              entry.publicPath,
+      publicPath: entry.publicPath,
 
-            featured:
-              entry.featured,
+      featured: entry.featured,
 
-            version:
-              entry.publishedVersion,
+      version: entry.publishedVersion,
 
-            publishedAt:
-              entry.publishedAt,
+      publishedAt: entry.publishedAt,
 
-            updatedAt:
-              entry.updatedAt,
+      updatedAt: entry.updatedAt,
 
-            data:
-              entry.publishedData,
+      data: entry.publishedData,
 
-            relationships:
-              relationshipsBySource.get(
-                entry._id.toString(),
-              ) ?? [],
-          }),
-        ),
-    });
+      relationships: relationshipsBySource.get(entry._id.toString()) ?? [],
+    })),
+  });
 
-  response.headers.set(
-    "Cache-Control",
-    "private, no-store, max-age=0",
-  );
+  response.headers.set("Cache-Control", "private, no-store, max-age=0");
 
   return response;
 }

@@ -5,6 +5,7 @@ export const contentTypes = [
   "FRAMEWORK",
   "WRITING",
   "MEDIA",
+  "TIMELINE",
   "ARCHIVE",
 ] as const;
 
@@ -33,16 +34,24 @@ export const revisionKinds = [
   "RESTORED",
 ] as const;
 
+// export const relationKinds = [
+//   "RELATED_PROJECT",
+//   "RELATED_RESEARCH",
+//   "RELATED_FRAMEWORK",
+//   "RELATED_WRITING",
+//   "RELATED_MEDIA",
+//   "RELATED_ARCHIVE",
+//   "REPLACED_BY",
+//   "DEPENDS_ON",
+//   "PRODUCED_BY",
+// ] as const;
+
 export const relationKinds = [
   "RELATED_PROJECT",
   "RELATED_RESEARCH",
   "RELATED_FRAMEWORK",
   "RELATED_WRITING",
   "RELATED_MEDIA",
-  "RELATED_ARCHIVE",
-  "REPLACED_BY",
-  "DEPENDS_ON",
-  "PRODUCED_BY",
 ] as const;
 
 export const publishActions = [
@@ -82,31 +91,22 @@ export const auditActions = [
   "SETTING_CHANGED",
 ] as const;
 
-export type ContentType =
-  (typeof contentTypes)[number];
+export type ContentType = (typeof contentTypes)[number];
 
-export type WorkflowStatus =
-  (typeof workflowStatuses)[number];
+export type WorkflowStatus = (typeof workflowStatuses)[number];
 
-export type PublicationStatus =
-  (typeof publicationStatuses)[number];
+export type PublicationStatus = (typeof publicationStatuses)[number];
 
-export type RevisionKind =
-  (typeof revisionKinds)[number];
+export type RevisionKind = (typeof revisionKinds)[number];
 
-export type RelationKind =
-  (typeof relationKinds)[number];
+export type RelationKind = (typeof relationKinds)[number];
 
-export type PublishAction =
-  (typeof publishActions)[number];
+export type PublishAction = (typeof publishActions)[number];
 
-export type PublishJobStatus =
-  (typeof publishJobStatuses)[number];
+export type PublishJobStatus = (typeof publishJobStatuses)[number];
 
-export type MessageStatus =
-  (typeof messageStatuses)[number];
+export type MessageStatus = (typeof messageStatuses)[number];
 
-export type AuditAction =
-  (typeof auditActions)[number];
+export type AuditAction = (typeof auditActions)[number];
 
 export type JsonObject = Record<string, unknown>;

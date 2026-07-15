@@ -13,58 +13,47 @@ type RevalidationPayload = {
   action: string;
 };
 
-function readResponseBody(
-  value: string,
-) {
+function readResponseBody(value: string) {
   return value.slice(0, 5_000);
 }
 
-export async function processPublishJob(
-  jobId: string,
-) {
+export async function processPublishJob(jobId: string) {
   if (!isValidObjectId(jobId)) {
-    throw new Error(
-      "Invalid publishing-job ID.",
-    );
+    throw new Error("Invalid publishing-job ID.");
   }
 
   await dbConnect();
 
-  const job =
-    await PublishJobModel.findOneAndUpdate(
-      {
-        _id: jobId,
-        status: "PENDING",
+  const job = await PublishJobModel.findOneAndUpdate(
+    {
+      _id: jobId,
+      status: "PENDING",
+    },
+
+    {
+      $set: {
+        status: "RUNNING",
+        startedAt: new Date(),
+        completedAt: null,
+        errorMessage: null,
       },
 
-      {
-        $set: {
-          status: "RUNNING",
-          startedAt: new Date(),
-          completedAt: null,
-          errorMessage: null,
-        },
-
-        $inc: {
-          attemptCount: 1,
-        },
+      $inc: {
+        attemptCount: 1,
       },
+    },
 
-      {
-        new: true,
-        runValidators: true,
-      },
-    );
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
 
   if (!job) {
-    throw new Error(
-      "The publishing job is not pending or no longer exists.",
-    );
+    throw new Error("The publishing job is not pending or no longer exists.");
   }
 
-  const revalidationUrl =
-    process.env.PUBLIC_SITE_REVALIDATE_URL
-      ?.trim();
+  const revalidationUrl = process.env.PUBLIC_SITE_REVALIDATE_URL?.trim();
 
   try {
     /*
@@ -90,60 +79,38 @@ export async function processPublishJob(
       return job;
     }
 
-    const payload =
-      job.payload as RevalidationPayload | null;
+    const payload = job.payload as RevalidationPayload | null;
 
     if (!payload) {
-      throw new Error(
-        "The publishing job does not contain a payload.",
-      );
+      throw new Error("The publishing job does not contain a payload.");
     }
 
-    const secret =
-      process.env
-        .PUBLIC_SITE_REVALIDATE_SECRET ??
-      "";
+    const secret = process.env.PUBLIC_SITE_REVALIDATE_SECRET ?? "";
 
-    const response = await fetch(
-      revalidationUrl,
-      {
-        method: "POST",
+    const response = await fetch(process.env.PUBLIC_SITE_REVALIDATE_URL!, {
+      method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json",
+      headers: {
+        "Content-Type": "application/json",
 
-          ...(secret
-            ? {
-                Authorization:
-                  `Bearer ${secret}`,
-              }
-            : {}),
-        },
-
-        body: JSON.stringify(payload),
-
-        cache: "no-store",
+        Authorization: `Bearer ${process.env.PUBLIC_SITE_REVALIDATE_SECRET}`,
       },
-    );
 
-    const responseText =
-      await response.text();
+      body: JSON.stringify(job.payload),
 
-    job.responseStatus =
-      response.status;
+      cache: "no-store",
+    });
+
+    const responseText = await response.text();
+
+    job.responseStatus = response.status;
 
     job.response = {
-      body:
-        readResponseBody(
-          responseText,
-        ),
+      body: readResponseBody(responseText),
     };
 
     if (!response.ok) {
-      throw new Error(
-        `Public-site revalidation returned ${response.status}.`,
-      );
+      throw new Error(`Public-site revalidation returned ${response.status}.`);
     }
 
     job.status = "SUCCEEDED";

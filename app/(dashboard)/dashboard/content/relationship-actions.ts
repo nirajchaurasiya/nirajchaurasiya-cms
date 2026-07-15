@@ -10,6 +10,9 @@ import { z } from "zod";
 
 import { requireOwner } from "@/lib/authorization";
 import { dbConnect } from "@/lib/mongodb";
+import {
+  requestPublicRevalidation,
+} from "@/lib/public-revalidation";
 
 import AuditLogModel from "@/models/AuditLog";
 import ContentEntryModel from "@/models/ContentEntry";
@@ -20,15 +23,85 @@ import {
 } from "@/types/content";
 
 type RelationshipActionState = {
-  status: "idle" | "success" | "error";
+  status:
+    | "idle"
+    | "success"
+    | "error";
+
   message: string;
 };
+
+function getErrorMessage(
+  error: unknown,
+) {
+  return error instanceof Error
+    ? error.message
+    : "An unknown error occurred.";
+}
+
+type RevalidationEntry = {
+  _id: {
+    toString(): string;
+  };
+
+  type: string;
+  slug: string;
+  publicPath?: string | null;
+  publicationStatus: string;
+  publishedVersion?: number | null;
+};
+
+async function refreshPublishedSource(
+  source: RevalidationEntry,
+  action:
+    | "RELATIONSHIP_UPDATED"
+    | "RELATIONSHIP_REMOVED",
+): Promise<string | null> {
+  if (
+    source.publicationStatus !==
+    "PUBLISHED"
+  ) {
+    return null;
+  }
+
+  try {
+    const result =
+      await requestPublicRevalidation({
+        contentId:
+          source._id.toString(),
+
+        type: source.type,
+
+        slug: source.slug,
+
+        publicPath:
+          source.publicPath ?? null,
+
+        version:
+          typeof source.publishedVersion ===
+          "number"
+            ? source.publishedVersion
+            : null,
+
+        action,
+      });
+
+    if (result.skipped) {
+      return result.body;
+    }
+
+    return null;
+  } catch (error) {
+    return getErrorMessage(error);
+  }
+}
 
 export async function saveRelationshipAction(
   _previousState: RelationshipActionState,
   formData: FormData,
 ): Promise<RelationshipActionState> {
-  const session = await requireOwner();
+  const session =
+    await requireOwner();
 
   try {
     const sourceId = z
@@ -48,18 +121,18 @@ export async function saveRelationshipAction(
     const relationKind = z
       .enum(relationKinds)
       .parse(
-        formData.get("relationKind"),
+        formData.get(
+          "relationKind",
+        ),
       );
 
+    const rawDescription =
+      formData.get("description");
+
     const description =
-      typeof formData.get(
-        "description",
-      ) === "string"
-        ? String(
-            formData.get(
-              "description",
-            ),
-          ).trim()
+      typeof rawDescription ===
+      "string"
+        ? rawDescription.trim()
         : "";
 
     const sortOrder = z.coerce
@@ -69,7 +142,9 @@ export async function saveRelationshipAction(
       .max(10_000)
       .catch(0)
       .parse(
-        formData.get("sortOrder"),
+        formData.get(
+          "sortOrder",
+        ),
       );
 
     if (
@@ -93,19 +168,23 @@ export async function saveRelationshipAction(
       await Promise.all([
         ContentEntryModel.findById(
           sourceId,
-        )
-          .select({
-            title: 1,
-          })
-          .lean(),
+        ).select({
+          title: 1,
+          type: 1,
+          slug: 1,
+          publicPath: 1,
+          publicationStatus: 1,
+          publishedVersion: 1,
+        }),
 
         ContentEntryModel.findById(
           targetId,
-        )
-          .select({
-            title: 1,
-          })
-          .lean(),
+        ).select({
+          title: 1,
+          type: 1,
+          slug: 1,
+          publicationStatus: 1,
+        }),
       ]);
 
     if (!source || !target) {
@@ -114,38 +193,40 @@ export async function saveRelationshipAction(
       );
     }
 
-    await ContentRelationModel.findOneAndUpdate(
-      {
-        sourceId,
-        targetId,
-        relationKind,
-      },
-
-      {
-        $set: {
-          description:
-            description || null,
-
-          sortOrder,
-        },
-
-        $setOnInsert: {
+    const relationship =
+      await ContentRelationModel.findOneAndUpdate(
+        {
           sourceId,
           targetId,
           relationKind,
         },
-      },
 
-      {
-        upsert: true,
-        new: true,
-        runValidators: true,
-        setDefaultsOnInsert: true,
-      },
-    );
+        {
+          $set: {
+            description:
+              description || null,
+
+            sortOrder,
+          },
+
+          $setOnInsert: {
+            sourceId,
+            targetId,
+            relationKind,
+          },
+        },
+
+        {
+          upsert: true,
+          new: true,
+          runValidators: true,
+          setDefaultsOnInsert: true,
+        },
+      );
 
     await AuditLogModel.create({
-      action: "RELATIONSHIP_CREATED",
+      action:
+        "RELATIONSHIP_CREATED",
 
       actorLogin:
         session.user.githubLogin,
@@ -153,29 +234,64 @@ export async function saveRelationshipAction(
       entityType:
         "ContentRelation",
 
-      entityId: source._id,
+      entityId:
+        relationship._id,
 
       description:
-        `Connected ${source.title} to ${target.title} using ${relationKind}`,
+        `Connected ${source.title} to ${target.title} using ${relationKind}.`,
+
+      metadata: {
+        sourceId:
+          source._id.toString(),
+
+        targetId:
+          target._id.toString(),
+
+        sourceType:
+          source.type,
+
+        targetType:
+          target.type,
+
+        relationKind,
+      },
     });
+
+    const refreshWarning =
+      await refreshPublishedSource(
+        source,
+        "RELATIONSHIP_UPDATED",
+      );
 
     revalidatePath(
       `/dashboard/content/${sourceId}`,
     );
 
+    revalidatePath(
+      "/dashboard/activity",
+    );
+
+    if (refreshWarning) {
+      return {
+        status: "success",
+
+        message:
+          `Relationship saved: ${target.title}. Public refresh warning: ${refreshWarning}`,
+      };
+    }
+
     return {
       status: "success",
+
       message:
-        `Relationship saved: ${target.title}.`,
+        `Relationship saved: ${target.title}. The public page was refreshed.`,
     };
   } catch (error) {
     return {
       status: "error",
 
       message:
-        error instanceof Error
-          ? error.message
-          : "The relationship could not be saved.",
+        getErrorMessage(error),
     };
   }
 }
@@ -184,14 +300,17 @@ export async function removeRelationshipAction(
   _previousState: RelationshipActionState,
   formData: FormData,
 ): Promise<RelationshipActionState> {
-  const session = await requireOwner();
+  const session =
+    await requireOwner();
 
   try {
     const relationId = z
       .string()
       .min(1)
       .parse(
-        formData.get("relationId"),
+        formData.get(
+          "relationId",
+        ),
       );
 
     const sourceId = z
@@ -214,13 +333,32 @@ export async function removeRelationshipAction(
 
     await dbConnect();
 
-    const deleted =
-      await ContentRelationModel.findOneAndDelete(
-        {
-          _id: relationId,
+    const [source, deleted] =
+      await Promise.all([
+        ContentEntryModel.findById(
           sourceId,
-        },
+        ).select({
+          title: 1,
+          type: 1,
+          slug: 1,
+          publicPath: 1,
+          publicationStatus: 1,
+          publishedVersion: 1,
+        }),
+
+        ContentRelationModel.findOneAndDelete(
+          {
+            _id: relationId,
+            sourceId,
+          },
+        ),
+      ]);
+
+    if (!source) {
+      throw new Error(
+        "The source content entry could not be found.",
       );
+    }
 
     if (!deleted) {
       throw new Error(
@@ -229,7 +367,8 @@ export async function removeRelationshipAction(
     }
 
     await AuditLogModel.create({
-      action: "DELETE",
+      action:
+        "RELATIONSHIP_REMOVED",
 
       actorLogin:
         session.user.githubLogin,
@@ -237,29 +376,59 @@ export async function removeRelationshipAction(
       entityType:
         "ContentRelation",
 
-      entityId: deleted._id,
+      entityId:
+        deleted._id,
 
       description:
-        "Removed a content relationship.",
+        `Removed a relationship from ${source.title}.`,
+
+      metadata: {
+        sourceId:
+          source._id.toString(),
+
+        targetId:
+          deleted.targetId.toString(),
+
+        relationKind:
+          deleted.relationKind,
+      },
     });
+
+    const refreshWarning =
+      await refreshPublishedSource(
+        source,
+        "RELATIONSHIP_REMOVED",
+      );
 
     revalidatePath(
       `/dashboard/content/${sourceId}`,
     );
 
+    revalidatePath(
+      "/dashboard/activity",
+    );
+
+    if (refreshWarning) {
+      return {
+        status: "success",
+
+        message:
+          `Relationship removed. Public refresh warning: ${refreshWarning}`,
+      };
+    }
+
     return {
       status: "success",
+
       message:
-        "Relationship removed.",
+        "Relationship removed. The public page was refreshed.",
     };
   } catch (error) {
     return {
       status: "error",
 
       message:
-        error instanceof Error
-          ? error.message
-          : "The relationship could not be removed.",
+        getErrorMessage(error),
     };
   }
 }

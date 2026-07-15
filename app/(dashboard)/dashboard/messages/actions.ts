@@ -1,11 +1,7 @@
 "use server";
 
-import {
-  isValidObjectId,
-} from "mongoose";
-import {
-  revalidatePath,
-} from "next/cache";
+import { isValidObjectId } from "mongoose";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireOwner } from "@/lib/authorization";
@@ -14,9 +10,7 @@ import { dbConnect } from "@/lib/mongodb";
 import AuditLogModel from "@/models/AuditLog";
 import ContactMessageModel from "@/models/ContactMessage";
 
-import {
-  messageStatuses,
-} from "@/types/content";
+import { messageStatuses } from "@/types/content";
 
 type MessageActionState = {
   status: "idle" | "success" | "error";
@@ -30,33 +24,21 @@ export async function setMessageStatusAction(
   const session = await requireOwner();
 
   try {
-    const messageId = z
-      .string()
-      .min(1)
-      .parse(
-        formData.get("messageId"),
-      );
-
+    const messageId = z.string().min(1).parse(formData.get("messageId"));
+    console.log(`visiting actions`);
     const nextStatus = z
       .enum(messageStatuses)
-      .parse(
-        formData.get("nextStatus"),
-      );
+      .parse(formData.get("nextStatus"));
 
     if (!isValidObjectId(messageId)) {
-      throw new Error(
-        "The message ID is invalid.",
-      );
+      throw new Error("The message ID is invalid.");
     }
 
     await dbConnect();
 
     const now = new Date();
 
-    const statusDates: Record<
-      string,
-      Record<string, Date | null>
-    > = {
+    const statusDates: Record<string, Record<string, Date | null>> = {
       NEW: {
         readAt: null,
         repliedAt: null,
@@ -85,62 +67,51 @@ export async function setMessageStatusAction(
       },
     };
 
-    const updated =
-      await ContactMessageModel.findByIdAndUpdate(
-        messageId,
+    const updated = await ContactMessageModel.findByIdAndUpdate(
+      messageId,
 
-        {
-          $set: {
-            status: nextStatus,
-            ...statusDates[nextStatus],
-          },
+      {
+        $set: {
+          status: nextStatus,
+          ...statusDates[nextStatus],
         },
+      },
 
-        {
-          new: true,
-          runValidators: true,
-        },
-      );
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     if (!updated) {
-      throw new Error(
-        "The message could not be found.",
-      );
+      throw new Error("The message could not be found.");
     }
 
     await AuditLogModel.create({
       action: "UPDATE",
 
-      actorLogin:
-        session.user.githubLogin,
+      actorLogin: session.user.githubLogin,
 
-      entityType:
-        "ContactMessage",
+      entityType: "ContactMessage",
 
-      entityId:
-        updated._id,
+      entityId: updated._id,
 
-      description:
-        `Changed message status to ${nextStatus}: ${updated.subject}`,
+      description: `Changed message status to ${nextStatus}: ${updated.subject}`,
     });
 
-    revalidatePath(
-      `/dashboard/messages/${messageId}`,
-    );
+    revalidatePath(`/dashboard/messages/${messageId}`);
 
-    revalidatePath(
-      "/dashboard/messages",
-    );
+    revalidatePath("/dashboard/messages");
 
     revalidatePath("/dashboard");
 
     return {
       status: "success",
 
-      message:
-        `Message marked as ${nextStatus.toLowerCase()}.`,
+      message: `Message marked as ${nextStatus.toLowerCase()}.`,
     };
   } catch (error) {
+    console.log(error);
     return {
       status: "error",
 
