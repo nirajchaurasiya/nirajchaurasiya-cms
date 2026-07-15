@@ -3243,4 +3243,174 @@ button {
     grid-column: 2;
     justify-self: start;
   }
+}/* =========================================================
+   Specialized content fields
+   ========================================================= */
+
+.specialized-fields {
+  display: grid;
+  gap: 22px;
+}
+
+.specialized-fields__introduction {
+  padding: 18px 20px;
+  border: 1px solid var(--dashboard-border, var(--border));
+  border-radius: 12px;
+  background:
+    var(
+      --dashboard-surface-subtle,
+      var(--surface)
+    );
+}
+
+.specialized-fields__introduction strong {
+  display: block;
+  color:
+    var(
+      --dashboard-text,
+      var(--text-primary)
+    );
+  font-size: 0.82rem;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+}
+
+.specialized-fields__introduction p {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color:
+    var(
+      --dashboard-text-muted,
+      var(--text-secondary)
+    );
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.specialized-fields > label,
+.specialized-fields
+  .content-editor__two-column
+  > label {
+  display: grid;
+  gap: 8px;
+}
+
+.specialized-fields label > span {
+  color:
+    var(
+      --dashboard-text-muted,
+      var(--text-tertiary)
+    );
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.specialized-fields input,
+.specialized-fields textarea,
+.specialized-fields select {
+  width: 100%;
+  border: 1px solid
+    var(
+      --dashboard-border,
+      var(--border)
+    );
+  border-radius: 10px;
+  background:
+    var(
+      --dashboard-input,
+      var(--background)
+    );
+  color:
+    var(
+      --dashboard-text,
+      var(--text-primary)
+    );
+  font: inherit;
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.specialized-fields input,
+.specialized-fields select {
+  min-height: 46px;
+  padding: 0 13px;
+}
+
+.specialized-fields textarea {
+  min-height: 120px;
+  padding: 13px;
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.specialized-fields input:focus,
+.specialized-fields textarea:focus,
+.specialized-fields select:focus {
+  border-color:
+    var(
+      --dashboard-border-strong,
+      var(--border-strong)
+    );
+
+  box-shadow:
+    0 0 0 3px
+    color-mix(
+      in srgb,
+      var(--text-primary)
+      8%,
+      transparent
+    );
+}
+
+.specialized-fields input::placeholder,
+.specialized-fields textarea::placeholder {
+  color:
+    var(
+      --dashboard-text-faint,
+      var(--text-tertiary)
+    );
+}
+
+.specialized-fields small {
+  color:
+    var(
+      --dashboard-text-faint,
+      var(--text-tertiary)
+    );
+  font-size: 0.64rem;
+  line-height: 1.55;
+}
+
+/* =========================================================
+   Two-column specialized fields
+   ========================================================= */
+
+.specialized-fields
+  .content-editor__two-column {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+  gap: 16px;
+}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+
+@media (max-width: 720px) {
+  .specialized-fields
+    .content-editor__two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .specialized-fields__introduction {
+    padding: 16px;
+  }
 }

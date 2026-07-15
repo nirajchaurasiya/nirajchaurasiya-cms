@@ -419,12 +419,17 @@ export default function ContentEditorForm({
       <section className="content-editor__panel">
         <PanelHeading
           number="03"
-          eyebrow={contentType}
+          eyebrow={
+            contentType === "PAGE" && slug
+              ? `${contentType} · ${slug}`
+              : contentType
+          }
           title="Specialized fields"
         />
 
         <SpecializedContentFields
           type={contentType}
+          slug={slug}
           value={detailsByType[contentType]}
           onChange={(nextDetails) =>
             setDetailsByType((current) => ({
