@@ -145,7 +145,7 @@ export async function saveRelationshipAction(
     );
 
     await AuditLogModel.create({
-      action: "UPDATE",
+      action: "RELATIONSHIP_CREATED",
 
       actorLogin:
         session.user.githubLogin,

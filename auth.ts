@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
-
+import { dbConnect } from "@/lib/mongodb";
+import AuditLogModel from "@/models/AuditLog";
 function readGitHubLogin(profile: unknown) {
   if (
     typeof profile !== "object" ||
@@ -28,6 +29,45 @@ export const {
   signOut,
 } = NextAuth({
   providers: [GitHub],
+
+  events: {
+  async signIn({ user, account, profile }) {
+    try {
+      await dbConnect();
+
+      const githubLogin =
+        typeof profile?.login === "string"
+          ? profile.login
+          : user.email ?? "unknown-owner";
+
+      await AuditLogModel.create({
+        action: "LOGIN",
+
+        actorLogin: githubLogin,
+
+        entityType: "Authentication",
+
+        entityId: null,
+
+        description:
+          `Owner signed in through ${account?.provider ?? "unknown provider"}.`,
+
+        metadata: {
+          provider:
+            account?.provider ?? null,
+
+          providerAccountId:
+            account?.providerAccountId ?? null,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Unable to record authentication activity:",
+        error,
+      );
+    }
+  },
+},
 
   pages: {
     signIn: "/login",

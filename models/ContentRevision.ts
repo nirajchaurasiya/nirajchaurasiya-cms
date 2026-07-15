@@ -5,6 +5,7 @@ import {
   model,
   models,
 } from "mongoose";
+
 import {
   revisionKinds,
   type JsonObject,
@@ -15,15 +16,27 @@ export interface ContentRevision {
   _id: Types.ObjectId;
 
   entryId: Types.ObjectId;
+
+  /**
+   * The content version associated with this event.
+   *
+   * Multiple events may share the same version:
+   * v1 CREATED
+   * v1 PUBLISHED
+   * v1 UNPUBLISHED
+   */
   revisionNumber: number;
 
   kind: RevisionKind;
+
   snapshot: JsonObject;
 
   note: string | null;
+
   actorLogin: string;
 
   createdAt: Date;
+  updatedAt: Date;
 }
 
 const ContentRevisionSchema =
@@ -51,11 +64,13 @@ const ContentRevisionSchema =
       snapshot: {
         type: Schema.Types.Mixed,
         required: true,
+        default: {},
       },
 
       note: {
         type: String,
         default: null,
+        trim: true,
         maxlength: 1_000,
       },
 
@@ -63,32 +78,35 @@ const ContentRevisionSchema =
         type: String,
         required: true,
         trim: true,
-        lowercase: true,
+        maxlength: 120,
       },
     },
     {
-      timestamps: {
-        createdAt: true,
-        updatedAt: false,
-      },
-
+      timestamps: true,
       collection: "content_revisions",
       minimize: false,
     },
   );
 
-ContentRevisionSchema.index(
-  {
-    entryId: 1,
-    revisionNumber: 1,
-  },
-  {
-    unique: true,
-  },
-);
+/**
+ * Revision history is an event log.
+ *
+ * This index is intentionally NOT unique because multiple
+ * events can belong to the same content version.
+ */
+ContentRevisionSchema.index({
+  entryId: 1,
+  createdAt: -1,
+});
 
 ContentRevisionSchema.index({
   entryId: 1,
+  revisionNumber: -1,
+});
+
+ContentRevisionSchema.index({
+  entryId: 1,
+  kind: 1,
   createdAt: -1,
 });
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  Activity,
   Archive,
   BarChart3,
   BookOpenText,
@@ -66,6 +67,11 @@ const navigation = [
     label: "Analytics",
     href: "/dashboard/analytics",
     icon: BarChart3,
+  },
+  {
+    label: "Activity",
+    href: "/dashboard/activity",
+    icon: Activity,
   },
   {
     label: "Publishing",
