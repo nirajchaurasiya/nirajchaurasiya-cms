@@ -3514,4 +3514,123 @@ button {
     width: 100%;
     justify-content: center;
   }
+}.dashboard-content-row--link {
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.dashboard-content-row--link:hover {
+  transform: translateY(-1px);
+  border-color: var(--text-tertiary);
+  background: var(--surface-raised);
+}
+
+.dashboard-content-index__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.dashboard-content-index__summary > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dashboard-content-index__summary strong {
+  font-size: 1.4rem;
+}
+
+.dashboard-content-index__summary span {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+}
+
+.dashboard-content-index__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboard-content-index__counts span {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.dashboard-content-row__eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboard-content-row__eyebrow span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dashboard-content-row__dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dashboard-content-row__dates span {
+  color: var(--text-tertiary);
+  font-size: 0.64rem;
+}
+
+.dashboard-content-row__state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.dashboard-content-row__state > span {
+  color: var(--text-tertiary);
+  font-size: 0.63rem;
+}
+
+.dashboard-content-row__state > strong {
+  color: var(--warning);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.dashboard-empty-state__action {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--button-primary-text);
+  background: var(--button-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+@media (max-width: 760px) {
+  .dashboard-content-index__summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-content-row__state {
+    justify-content: flex-start;
+  }
 }
