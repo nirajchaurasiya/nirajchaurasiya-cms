@@ -4,6 +4,7 @@ export const contentTypes = [
   "RESEARCH",
   "FRAMEWORK",
   "WRITING",
+  "BOOK",
   "MEDIA",
   "TIMELINE",
   "ARCHIVE",
@@ -51,7 +52,13 @@ export const relationKinds = [
   "RELATED_RESEARCH",
   "RELATED_FRAMEWORK",
   "RELATED_WRITING",
+  "RELATED_BOOK",
   "RELATED_MEDIA",
+  "RELATED_TIMELINE",
+  "RELATED_ARCHIVE",
+  "REPLACED_BY",
+  "DEPENDS_ON",
+  "PRODUCED_BY",
 ] as const;
 
 export const publishActions = [

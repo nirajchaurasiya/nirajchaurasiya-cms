@@ -29,6 +29,11 @@ const navigation = [
     icon: FileText,
   },
   {
+    label: "Books",
+    href: "/dashboard/books",
+    icon: BookOpenText,
+  },
+  {
     label: "Projects",
     href: "/dashboard/content?type=PROJECT",
     icon: BriefcaseBusiness,
@@ -110,15 +115,8 @@ export default function DashboardSidebar() {
           const Icon = item.icon;
 
           return (
-            <Link
-              href={item.href}
-              key={item.href}
-            >
-              <Icon
-                size={18}
-                strokeWidth={1.75}
-                aria-hidden="true"
-              />
+            <Link href={item.href} key={item.href}>
+              <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
 
               {item.label}
             </Link>
@@ -128,12 +126,7 @@ export default function DashboardSidebar() {
 
       <form action={logout}>
         <button type="submit">
-          <LogOut
-            size={17}
-            strokeWidth={1.8}
-            aria-hidden="true"
-          />
-
+          <LogOut size={17} strokeWidth={1.8} aria-hidden="true" />
           Sign out
         </button>
       </form>

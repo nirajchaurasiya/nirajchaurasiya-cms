@@ -1,9 +1,58 @@
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
+
 import type { ContentType } from "@/types/content";
 
 type Details = Record<string, unknown>;
+type BookReflection = {
+  id: string;
+  date: string;
+  title: string;
+  body: string;
+};
 
+function createBookReflectionId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `reflection-${Date.now()}`;
+}
+
+function readBookReflections(value: Details): BookReflection[] {
+  const result = value.reflections;
+
+  if (!Array.isArray(result)) {
+    return [];
+  }
+
+  return result
+    .map((item, index) => {
+      if (typeof item !== "object" || item === null || Array.isArray(item)) {
+        return null;
+      }
+
+      const reflection = item as Record<string, unknown>;
+
+      return {
+        id:
+          typeof reflection.id === "string" && reflection.id.trim()
+            ? reflection.id
+            : `reflection-${index + 1}`,
+
+        date: typeof reflection.date === "string" ? reflection.date : "",
+
+        title: typeof reflection.title === "string" ? reflection.title : "",
+
+        body: typeof reflection.body === "string" ? reflection.body : "",
+      };
+    })
+    .filter((reflection): reflection is BookReflection => reflection !== null);
+}
 type SpecializedContentFieldsProps = {
   type: ContentType;
   slug: string;
@@ -402,7 +451,92 @@ export default function SpecializedContentFields({
       </>
     );
   }
+  if (type === "BOOK") {
+    return (
+      <>
+        <div className="content-editor__two-column">
+          <TextField
+            label="Author"
+            value={readString(value, "author")}
+            placeholder="Daniel Kahneman"
+            onChange={(nextValue) => setField("author", nextValue)}
+          />
 
+          <SelectField
+            label="Conversation status"
+            value={readString(value, "status")}
+            options={[
+              "Currently reading",
+              "In conversation",
+              "Completed",
+              "Paused",
+            ]}
+            onChange={(nextValue) => setField("status", nextValue)}
+          />
+        </div>
+
+        <div className="content-editor__two-column">
+          <TextField
+            label="Started date"
+            type="date"
+            value={readString(value, "startedAt")}
+            onChange={(nextValue) => setField("startedAt", nextValue)}
+          />
+
+          <TextField
+            label="Completed date"
+            type="date"
+            value={readString(value, "completedAt")}
+            onChange={(nextValue) => setField("completedAt", nextValue)}
+          />
+        </div>
+
+        <TextAreaField
+          label="Central question"
+          value={readString(value, "centralQuestion")}
+          placeholder="What question brought you into this conversation?"
+          onChange={(nextValue) => setField("centralQuestion", nextValue)}
+        />
+
+        <TextAreaField
+          label="Why I entered this conversation"
+          value={readString(value, "whyEntered")}
+          placeholder="Why did this book become relevant to your current questions or work?"
+          onChange={(nextValue) => setField("whyEntered", nextValue)}
+        />
+
+        <TextAreaField
+          label="Current reflection"
+          value={readString(value, "currentReflection")}
+          placeholder="What is the book currently changing, questioning, or clarifying?"
+          onChange={(nextValue) => setField("currentReflection", nextValue)}
+        />
+
+        <ListField
+          label="Reading threads"
+          value={readList(value, "threads")}
+          placeholder={
+            "Cognition and judgment\nLearning and understanding\nSystems and uncertainty"
+          }
+          onChange={(nextValue) => setList("threads", nextValue)}
+        />
+
+        <ListField
+          label="Open questions"
+          value={readList(value, "openQuestions")}
+          placeholder={
+            "How much judgment occurs before deliberate reasoning?\nWhat remains unresolved?"
+          }
+          onChange={(nextValue) => setList("openQuestions", nextValue)}
+        />
+
+        <BookReflectionEditor
+          value={readBookReflections(value)}
+          onChange={(reflections) => setField("reflections", reflections)}
+        />
+      </>
+    );
+  }
   if (type === "MEDIA") {
     return (
       <>
@@ -516,7 +650,121 @@ export default function SpecializedContentFields({
     </>
   );
 }
+function BookReflectionEditor({
+  value,
+  onChange,
+}: {
+  value: BookReflection[];
+  onChange: (value: BookReflection[]) => void;
+}) {
+  function addReflection() {
+    onChange([
+      ...value,
+      {
+        id: createBookReflectionId(),
+        date: "",
+        title: "",
+        body: "",
+      },
+    ]);
+  }
 
+  function updateReflection(
+    id: string,
+    field: "date" | "title" | "body",
+    fieldValue: string,
+  ) {
+    onChange(
+      value.map((reflection) =>
+        reflection.id === id
+          ? {
+              ...reflection,
+              [field]: fieldValue,
+            }
+          : reflection,
+      ),
+    );
+  }
+
+  function removeReflection(id: string) {
+    onChange(value.filter((reflection) => reflection.id !== id));
+  }
+
+  return (
+    <div className="book-reflection-editor">
+      <header className="book-reflection-editor__header">
+        <div>
+          <span>Reflection log</span>
+
+          <p>Preserve dated changes in your interpretation of the book.</p>
+        </div>
+
+        <button
+          type="button"
+          className="content-editor__add"
+          onClick={addReflection}
+        >
+          <Plus size={16} aria-hidden="true" />
+          Add reflection
+        </button>
+      </header>
+
+      {value.length === 0 ? (
+        <div className="book-reflection-editor__empty">
+          <p>No dated reflections have been added yet.</p>
+        </div>
+      ) : (
+        <div className="book-reflection-editor__list">
+          {value.map((reflection, index) => (
+            <article
+              className="book-reflection-editor__entry"
+              key={reflection.id}
+            >
+              <header>
+                <strong>Reflection {String(index + 1).padStart(2, "0")}</strong>
+
+                <button
+                  type="button"
+                  aria-label={`Remove reflection ${index + 1}`}
+                  onClick={() => removeReflection(reflection.id)}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                </button>
+              </header>
+
+              <TextField
+                label="Reflection date"
+                type="date"
+                value={reflection.date}
+                onChange={(nextValue) =>
+                  updateReflection(reflection.id, "date", nextValue)
+                }
+              />
+
+              <TextField
+                label="Reflection title"
+                value={reflection.title}
+                placeholder="Confidence is not transparent"
+                onChange={(nextValue) =>
+                  updateReflection(reflection.id, "title", nextValue)
+                }
+              />
+
+              <TextAreaField
+                label="Reflection"
+                value={reflection.body}
+                placeholder="What changed in your interpretation?"
+                onChange={(nextValue) =>
+                  updateReflection(reflection.id, "body", nextValue)
+                }
+              />
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function TextField({
   label,
   value,

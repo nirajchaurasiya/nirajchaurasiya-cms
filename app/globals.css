@@ -3413,4 +3413,105 @@ button {
   .specialized-fields__introduction {
     padding: 16px;
   }
+}.book-reflection-editor {
+  display: grid;
+  gap: 18px;
+  margin-top: 8px;
+  padding-top: 26px;
+  border-top: 1px solid var(--dashboard-border);
+}
+
+.book-reflection-editor__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.book-reflection-editor__header > div > span {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 680;
+}
+
+.book-reflection-editor__header p {
+  margin: 6px 0 0;
+  color: var(--dashboard-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.book-reflection-editor__empty {
+  padding: 28px;
+  border: 1px dashed var(--dashboard-border);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.book-reflection-editor__empty p {
+  margin: 0;
+  color: var(--dashboard-text-secondary);
+  font-size: 0.82rem;
+}
+
+.book-reflection-editor__list {
+  display: grid;
+  gap: 16px;
+}
+
+.book-reflection-editor__entry {
+  display: grid;
+  gap: 17px;
+  padding: 22px;
+  border: 1px solid var(--dashboard-border);
+  border-radius: 17px;
+  background: var(--dashboard-surface);
+}
+
+.book-reflection-editor__entry > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--dashboard-border);
+}
+
+.book-reflection-editor__entry > header strong {
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.book-reflection-editor__entry > header button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--dashboard-border);
+  border-radius: 10px;
+  color: var(--dashboard-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.book-reflection-editor__entry > header button:hover {
+  color: var(--dashboard-danger);
+  border-color: color-mix(
+    in srgb,
+    var(--dashboard-danger) 45%,
+    var(--dashboard-border)
+  );
+}
+
+@media (max-width: 720px) {
+  .book-reflection-editor__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .book-reflection-editor__header button {
+    width: 100%;
+    justify-content: center;
+  }
 }
