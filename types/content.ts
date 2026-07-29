@@ -9,7 +9,17 @@ export const contentTypes = [
   "TIMELINE",
   "ARCHIVE",
 ] as const;
-
+export const cmsContentTypes = [
+  "PAGE",
+  "PROJECT",
+  "RESEARCH",
+  "FRAMEWORK",
+  "WRITING",
+  "BOOK",
+  "MEDIA",
+  "TIMELINE",
+  "ARCHIVE",
+] as const;
 export const workflowStatuses = [
   "DRAFT",
   "REVIEW",

@@ -537,6 +537,86 @@ export default function SpecializedContentFields({
       </>
     );
   }
+  if (type === "TIMELINE") {
+    return (
+      <>
+        <div className="content-editor__two-column">
+          <TextField
+            label="Event date"
+            type="date"
+            value={readString(value, "eventDate")}
+            onChange={(nextValue) => setField("eventDate", nextValue)}
+          />
+
+          <SelectField
+            label="Event type"
+            value={readString(value, "eventType")}
+            options={[
+              "Project launch",
+              "Project milestone",
+              "Research publication",
+              "Research milestone",
+              "Presentation",
+              "Framework release",
+              "Writing publication",
+              "Book reflection",
+              "Media release",
+              "Talk",
+              "System milestone",
+              "Academic milestone",
+              "Version release",
+              "Archive transition",
+            ]}
+            onChange={(nextValue) => setField("eventType", nextValue)}
+          />
+        </div>
+
+        <div className="content-editor__two-column">
+          <SelectField
+            label="Milestone status"
+            value={readString(value, "status")}
+            options={[
+              "Planned",
+              "In preparation",
+              "In progress",
+              "Ongoing",
+              "Completed",
+              "Published",
+              "Operational",
+              "Current version",
+              "Replaced",
+              "Archived",
+            ]}
+            onChange={(nextValue) => setField("status", nextValue)}
+          />
+
+          <TextField
+            label="Location or platform"
+            value={readString(value, "location")}
+            placeholder="TechXEng, Arkansas State University, Online..."
+            onChange={(nextValue) => setField("location", nextValue)}
+          />
+        </div>
+
+        <div className="timeline-editor-guidance">
+          <strong>Timeline structure</strong>
+
+          <p>
+            Use the first content section to explain what changed. Its body and
+            points become the primary evidence displayed on the public timeline.
+          </p>
+
+          <div className="timeline-editor-guidance__fields">
+            <span>Section heading: What changed</span>
+
+            <span>Body: Explain the transition</span>
+
+            <span>Points: Preserve the resulting changes</span>
+          </div>
+        </div>
+      </>
+    );
+  }
   if (type === "MEDIA") {
     return (
       <>
