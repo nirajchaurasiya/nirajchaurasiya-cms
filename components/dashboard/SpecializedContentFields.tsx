@@ -5,6 +5,37 @@ import { Plus, Trash2 } from "lucide-react";
 import type { ContentType } from "@/types/content";
 
 type Details = Record<string, unknown>;
+
+type TimelineExternalLink = {
+  label: string;
+  href: string;
+};
+
+function readExternalLinks(value: Details): TimelineExternalLink[] {
+  const result = value.externalLinks;
+
+  if (!Array.isArray(result)) {
+    return [];
+  }
+
+  return result
+    .map((item) => {
+      if (typeof item !== "object" || item === null || Array.isArray(item)) {
+        return null;
+      }
+
+      const label = Reflect.get(item, "label");
+
+      const href = Reflect.get(item, "href");
+
+      return {
+        label: typeof label === "string" ? label : "",
+
+        href: typeof href === "string" ? href : "",
+      };
+    })
+    .filter((item): item is TimelineExternalLink => item !== null);
+}
 type BookReflection = {
   id: string;
   date: string;
@@ -538,6 +569,45 @@ export default function SpecializedContentFields({
     );
   }
   if (type === "TIMELINE") {
+    const externalLinks = readExternalLinks(value);
+
+    function setExternalLinks(nextLinks: TimelineExternalLink[]) {
+      setField("externalLinks", nextLinks);
+    }
+
+    function updateExternalLink(
+      index: number,
+      field: keyof TimelineExternalLink,
+      nextValue: string,
+    ) {
+      setExternalLinks(
+        externalLinks.map((link, linkIndex) =>
+          linkIndex === index
+            ? {
+                ...link,
+                [field]: nextValue,
+              }
+            : link,
+        ),
+      );
+    }
+
+    function removeExternalLink(index: number) {
+      setExternalLinks(
+        externalLinks.filter((_, linkIndex) => linkIndex !== index),
+      );
+    }
+
+    function addExternalLink() {
+      setExternalLinks([
+        ...externalLinks,
+        {
+          label: "",
+          href: "",
+        },
+      ]);
+    }
+
     return (
       <>
         <div className="content-editor__two-column">
@@ -548,72 +618,96 @@ export default function SpecializedContentFields({
             onChange={(nextValue) => setField("eventDate", nextValue)}
           />
 
-          <SelectField
+          <TextField
             label="Event type"
             value={readString(value, "eventType")}
-            options={[
-              "Project launch",
-              "Project milestone",
-              "Research publication",
-              "Research milestone",
-              "Presentation",
-              "Framework release",
-              "Writing publication",
-              "Book reflection",
-              "Media release",
-              "Talk",
-              "System milestone",
-              "Academic milestone",
-              "Version release",
-              "Archive transition",
-            ]}
+            placeholder="Book reflection"
             onChange={(nextValue) => setField("eventType", nextValue)}
           />
         </div>
 
         <div className="content-editor__two-column">
-          <SelectField
-            label="Milestone status"
+          <TextField
+            label="Status"
             value={readString(value, "status")}
-            options={[
-              "Planned",
-              "In preparation",
-              "In progress",
-              "Ongoing",
-              "Completed",
-              "Published",
-              "Operational",
-              "Current version",
-              "Replaced",
-              "Archived",
-            ]}
+            placeholder="Completed"
             onChange={(nextValue) => setField("status", nextValue)}
           />
 
           <TextField
-            label="Location or platform"
+            label="Location or context"
             value={readString(value, "location")}
-            placeholder="TechXEng, Arkansas State University, Online..."
+            placeholder="Conversation Across Times"
             onChange={(nextValue) => setField("location", nextValue)}
           />
         </div>
 
-        <div className="timeline-editor-guidance">
-          <strong>Timeline structure</strong>
+        <section className="timeline-external-links-editor">
+          <header className="timeline-external-links-editor__header">
+            <div>
+              <span>External links</span>
 
-          <p>
-            Use the first content section to explain what changed. Its body and
-            points become the primary evidence displayed on the public timeline.
-          </p>
+              <p>
+                Optionally connect this milestone to YouTube, GitHub, a live
+                system, an external article, or another website.
+              </p>
+            </div>
 
-          <div className="timeline-editor-guidance__fields">
-            <span>Section heading: What changed</span>
+            <button type="button" onClick={addExternalLink}>
+              + Add link
+            </button>
+          </header>
 
-            <span>Body: Explain the transition</span>
+          {externalLinks.length > 0 ? (
+            <div className="timeline-external-links-editor__list">
+              {externalLinks.map((link, index) => (
+                <article
+                  className="timeline-external-links-editor__row"
+                  key={index}
+                >
+                  <div className="content-editor__two-column">
+                    <label>
+                      <span>Link label</span>
 
-            <span>Points: Preserve the resulting changes</span>
-          </div>
-        </div>
+                      <input
+                        value={link.label}
+                        placeholder="Watch the episode"
+                        onChange={(event) =>
+                          updateExternalLink(index, "label", event.target.value)
+                        }
+                      />
+                    </label>
+
+                    <label>
+                      <span>External URL</span>
+
+                      <input
+                        type="url"
+                        value={link.href}
+                        placeholder="https://..."
+                        onChange={(event) =>
+                          updateExternalLink(index, "href", event.target.value)
+                        }
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="timeline-external-links-editor__remove"
+                    onClick={() => removeExternalLink(index)}
+                  >
+                    Remove link
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="timeline-external-links-editor__empty">
+              No external links added.
+            </div>
+          )}
+        </section>
       </>
     );
   }

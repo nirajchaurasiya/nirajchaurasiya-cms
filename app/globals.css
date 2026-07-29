@@ -3994,3 +3994,103 @@ button {
     width: 100%;
   }
 }
+/* =========================================================
+   Timeline external-link editor
+   ========================================================= */
+
+.timeline-external-links-editor {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--dashboard-border, #dedfd9);
+  border-radius: 14px;
+  background: var(--dashboard-surface-secondary, #f7f8f5);
+}
+
+.timeline-external-links-editor__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.timeline-external-links-editor__header span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.timeline-external-links-editor__header p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--dashboard-text-secondary, #727770);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.timeline-external-links-editor__header button,
+.timeline-external-links-editor__remove {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--dashboard-border, #dedfd9);
+  border-radius: 9px;
+  background: var(--dashboard-surface, #ffffff);
+  color: inherit;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.timeline-external-links-editor__header button {
+  flex-shrink: 0;
+}
+
+.timeline-external-links-editor__header button:hover,
+.timeline-external-links-editor__remove:hover {
+  border-color: var(--dashboard-border-strong, #b9bcb5);
+}
+
+.timeline-external-links-editor__list {
+  display: grid;
+  gap: 12px;
+}
+
+.timeline-external-links-editor__row {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--dashboard-border, #dedfd9);
+  border-radius: 12px;
+  background: var(--dashboard-surface, #ffffff);
+}
+
+.timeline-external-links-editor__remove {
+  justify-self: end;
+  color: #a43b3b;
+}
+
+.timeline-external-links-editor__empty {
+  padding: 18px;
+  border: 1px dashed var(--dashboard-border, #dedfd9);
+  border-radius: 11px;
+  color: var(--dashboard-text-secondary, #727770);
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .timeline-external-links-editor__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .timeline-external-links-editor__header button {
+    align-self: flex-start;
+  }
+
+  .timeline-external-links-editor__remove {
+    justify-self: stretch;
+  }
+}
